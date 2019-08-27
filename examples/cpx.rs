@@ -14,7 +14,6 @@ use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
 
 use lis3dh::Lis3dh;
-use lis3dh::accelerometer::Accelerometer;
 
 #[entry]
 fn main() -> ! {
@@ -39,12 +38,14 @@ fn main() -> ! {
     );
 
     let mut lis3dh = Lis3dh::new(i2c, 0x19).unwrap();
+    lis3dh.set_range(lis3dh::Range::G8).unwrap();
     let mut delay = Delay::new(core.SYST, &mut clocks);
-
+    
+    let mut tracker = lis3dh.try_into_tracker().unwrap();
 
     loop {
-        let accel = lis3dh.acceleration();
-        hprintln!("{:?}", accel).ok();
+        let orientation = tracker.orientation().unwrap();
+        hprintln!("{:?}", orientation).ok();
         delay.delay_ms(1000u16)
     }
 }

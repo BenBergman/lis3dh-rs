@@ -7,10 +7,10 @@ keywords = ["embedded-hal-driver", "accelerometer"]
 
 [dependencies]
 embedded-hal = "~0.2"
-accelerometer = { version = "0.6", features = ["orientation"] }
+accelerometer = { version = "~0.6", features = ["orientation"] }
 
 [dev-dependencies]
-circuit_playground_express = { path = "../atsamd/boards/circuit_playground_express", features = ["use_semihosting"] }
+circuit_playground_express = { version = "~0.4.0", features = ["use_semihosting"] }
 panic-halt = "~0.2"
 cortex-m-rt = "~0.6"
 cortex-m-semihosting = "~0.3"

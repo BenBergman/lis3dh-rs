@@ -9,7 +9,7 @@ use embedded_hal::blocking::i2c::{WriteRead, Write};
 
 pub use register::Register;
 pub use accelerometer;
-use accelerometer::{I16x3, Accelerometer};
+use accelerometer::{I16x3, Accelerometer, Tracker};
 
 #[derive(Debug)]
 pub enum Error<E> {
@@ -168,6 +168,14 @@ where
             return Err(Error::WriteToReadOnly);
         }
         self.i2c.write(self.address, &[register.addr(), value]).map_err(Error::I2C)
+    }
+
+    pub fn try_into_tracker(mut self) -> Result<Tracker<Self, I16x3>, Error<E>> 
+    where 
+        E: Debug
+    {
+        self.set_range(Range::G8)?;
+        Ok(Tracker::new(self, 3700))
     }
 }
 
