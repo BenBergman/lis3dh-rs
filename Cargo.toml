@@ -1,5 +1,6 @@
 [package]
 name = "lis3dh"
+description = "An embedded-hal driver for the LIS3DH accelerometer that implements the generic accelerometer trait"
 version = "0.1.0"
 authors = ["Benjamin Bergman <ben@benbergman.ca>", "Paul Sajna <sajattack@gmail.com>"]
 edition = "2018"
