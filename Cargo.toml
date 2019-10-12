@@ -1,9 +1,10 @@
 [package]
 name = "lis3dh"
 version = "0.1.0"
-authors = ["Benjamin Bergman <benjamin.bergman@humanrights.ca>"]
+authors = ["Benjamin Bergman <ben@benbergman.ca>", "Paul Sajna <sajattack@gmail.com>"]
 edition = "2018"
 keywords = ["embedded-hal-driver", "accelerometer"]
+repository = "https://github.com/BenBergman/lis3dh-rs"
 
 [dependencies]
 embedded-hal = "~0.2"
