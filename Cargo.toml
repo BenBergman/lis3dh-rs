@@ -3,17 +3,24 @@ name = "lis3dh"
 description = "An embedded-hal driver for the LIS3DH accelerometer that implements the generic accelerometer trait"
 version = "0.1.0"
 license = "Apache-2.0 OR MIT"
-authors = ["Benjamin Bergman <ben@benbergman.ca>", "Paul Sajna <sajattack@gmail.com>"]
-edition = "2018"
-keywords = ["embedded-hal-driver", "accelerometer"]
+authors = [
+    "Benjamin Bergman <ben@benbergman.ca>",
+    "Paul Sajna <sajattack@gmail.com>",
+    "Jesse Braham <jesse@beta7.io>",
+]
+keywords = [
+    "embedded-hal-driver",
+    "accelerometer",
+]
 repository = "https://github.com/BenBergman/lis3dh-rs"
+edition = "2018"
 
 [dependencies]
+accelerometer = "~0.12"
 embedded-hal = "~0.2"
-accelerometer = { version = "~0.6", features = ["orientation"] }
 
 [dev-dependencies]
-circuit_playground_express = { version = "~0.4.0", features = ["use_semihosting"] }
-panic-halt = "~0.2"
+circuit_playground_express = { version = "~0.7", features = ["use_semihosting"] }
 cortex-m-rt = "~0.6"
 cortex-m-semihosting = "~0.3"
+panic-halt = "~0.2"
