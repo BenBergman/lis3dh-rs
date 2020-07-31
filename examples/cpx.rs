@@ -4,16 +4,17 @@
 use circuit_playground_express as hal;
 extern crate panic_halt;
 
-use hal::clock::GenericClockController;
-use hal::delay::Delay;
-use hal::prelude::*;
-use hal::{CorePeripherals, Peripherals};
-use hal::sercom::{PadPin, I2CMaster1};
-use hal::time::KiloHertz;
+use accelerometer::RawAccelerometer;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
+use hal::clock::GenericClockController;
+use hal::delay::Delay;
+use hal::pac::{CorePeripherals, Peripherals};
+use hal::prelude::*;
+use hal::sercom::{I2CMaster1, PadPin};
+use hal::time::KiloHertz;
 
-use lis3dh::Lis3dh;
+use lis3dh::{Lis3dh, SlaveAddr};
 
 #[entry]
 fn main() -> ! {
@@ -37,14 +38,15 @@ fn main() -> ! {
         pins.accel_scl.into_pad(&mut pins.port),
     );
 
-    let mut lis3dh = Lis3dh::new(i2c, 0x19).unwrap();
+    let mut lis3dh = Lis3dh::new(i2c, SlaveAddr::Alternate).unwrap();
     lis3dh.set_range(lis3dh::Range::G8).unwrap();
     let mut delay = Delay::new(core.SYST, &mut clocks);
-    
+
     let mut tracker = lis3dh.try_into_tracker().unwrap();
 
     loop {
-        let orientation = tracker.orientation().unwrap();
+        let accel = lis3dh.accel_raw().unwrap();
+        let orientation = tracker.update(accel);
         hprintln!("{:?}", orientation).ok();
         delay.delay_ms(1000u16)
     }
