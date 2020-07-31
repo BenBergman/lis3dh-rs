@@ -9,7 +9,7 @@
 
 #![no_std]
 
-use core::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 use core::fmt::Debug;
 
 use accelerometer;
@@ -110,7 +110,7 @@ where
             (true, false) => Mode::LowPower,
             (false, false) => Mode::Normal,
             (false, true) => Mode::HighResolution,
-            _ => return Err(Error::InvalidMode)
+            _ => return Err(Error::InvalidMode),
         };
 
         Ok(mode)
@@ -118,10 +118,6 @@ where
 
     /// Data rate selection
     pub fn set_datarate(&mut self, datarate: DataRate) -> Result<(), Error<E>> {
-        if datarate == DataRate::Invalid {
-            return Err(Error::InvalidDataRate);
-        }
-
         self.modify_register(Register::CTRL1, |mut ctrl1| {
             // Mask off lowest 4 bits
             ctrl1 &= 0xF;
@@ -135,19 +131,19 @@ where
     /// Read the current data selection rate
     pub fn get_datarate(&mut self) -> Result<DataRate, Error<E>> {
         let ctrl1 = self.read_register(Register::CTRL1)?;
+        let odr = (ctrl1 >> 4) & 0x0F;
 
-        Ok(DataRate::from((ctrl1 >> 4) & 0x0F))
+        match DataRate::try_from(odr) {
+            Ok(rate) => Ok(rate),
+            Err(_) => Err(Error::InvalidDataRate),
+        }
     }
 
     /// Range selection
     pub fn set_range(&mut self, range: Range) -> Result<(), Error<E>> {
-        if range == Range::Invalid {
-            return Err(Error::InvalidRange);
-        }
-
         self.modify_register(Register::CTRL4, |mut ctrl4| {
             // Mask off lowest 4 bits
-        ctrl4 &= !0x30;
+            ctrl4 &= !0x30;
             // Write in new range to highest 4 bits
         ctrl4 |= range.bits() << 4;
 
@@ -158,8 +154,12 @@ where
     /// Read the current range
     pub fn get_range(&mut self) -> Result<Range, Error<E>> {
         let ctrl4 = self.read_register(Register::CTRL4)?;
+        let fs = (ctrl4 >> 4) & 0x03;
 
-        Ok(Range::from((ctrl4 >> 4) & 0x03))
+        match Range::try_from(fs) {
+            Ok(range) => Ok(range),
+            Err(_) => Err(Error::InvalidRange),
+        }
     }
 
     /// Use this accelerometer as an orientation tracker
@@ -228,18 +228,12 @@ impl<I2C, E> Accelerometer for Lis3dh<I2C>
 
     /// Get normalized ±g reading from the accelerometer
     fn accel_norm(&mut self) -> Result<F32x3, AccelerometerError<Self::Error>> {
-        let range = self.get_range()?;
-        if range == Range::Invalid {
-            return Err(AccelerometerError::from(Self::Error::InvalidRange));
-        }
-
         let acc_raw: I16x3 = self.accel_raw()?;
-        let sensitivity = match range {
+        let sensitivity = match self.get_range()? {
             Range::G16 => 0.012,
             Range::G8 => 0.004,
             Range::G4 => 0.002,
             Range::G2 => 0.001,
-            _ => unreachable!(),
         };
 
         Ok(F32x3::new(
@@ -268,7 +262,6 @@ impl<I2C, E> Accelerometer for Lis3dh<I2C>
             DataRate::Hz_1 => 1.0,
             DataRate::PowerDown => 0.0,
             DataRate::LowPower_1K6HZ => 1600.0,
-            DataRate::Invalid => 0.0,
         };
 
         Ok(sample_rate)

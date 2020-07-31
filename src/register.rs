@@ -1,7 +1,11 @@
+use num_enum::TryFromPrimitive;
+
 /// Unique device identifier
 pub const DEVICE_ID: u8 = 0x33;
 
 /// Possible I²C slave addresses
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum SlaveAddr {
     /// Default slave address (0x18)
     Default = 0x18,
@@ -99,7 +103,7 @@ impl Register {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum Range {
     /// ±16g
@@ -113,8 +117,6 @@ pub enum Range {
 
     /// ±2g (Default)
     G2 = 0b00,
-
-    Invalid = 0xFF,
 }
 
 impl Range {
@@ -123,20 +125,8 @@ impl Range {
     }
 }
 
-impl From<u8> for Range {
-    fn from(value: u8) -> Range {
-        match value {
-            0b11 => Range::G16,
-            0b10 => Range::G8,
-            0b01 => Range::G4,
-            0b00 => Range::G2,
-            _ => Range::Invalid,
-        }
-    }
-}
-
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum DataRate {
     /// 400Hz (Default)
@@ -168,31 +158,11 @@ pub enum DataRate {
 
     /// # Normal power mode (1344Hz) / Low power mode (5KHz)
     Hz_1344_LP5k = 0b1001,
-
-    Invalid = 0xFF,
 }
 
 impl DataRate {
     pub fn bits(self) -> u8 {
         self as u8
-    }
-}
-
-impl From<u8> for DataRate {
-    fn from(value: u8) -> DataRate {
-        match value {
-            0b1001 => DataRate::Hz_1344_LP5k,
-            0b0111 => DataRate::Hz_400,
-            0b0110 => DataRate::Hz_200,
-            0b0101 => DataRate::Hz_100,
-            0b0100 => DataRate::Hz_50,
-            0b0011 => DataRate::Hz_25,
-            0b0010 => DataRate::Hz_10,
-            0b0001 => DataRate::Hz_1,
-            0b0000 => DataRate::PowerDown,
-            0b1000 => DataRate::LowPower_1K6HZ,
-            _ => DataRate::Invalid,
-        }
     }
 }
 

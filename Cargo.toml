@@ -18,6 +18,7 @@ edition = "2018"
 [dependencies]
 accelerometer = "~0.12"
 embedded-hal = "~0.2"
+num_enum = { version = "~0.5", default-features = false }
 
 [dev-dependencies]
 circuit_playground_express = { version = "~0.7", features = ["use_semihosting"] }
