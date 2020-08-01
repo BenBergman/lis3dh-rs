@@ -204,6 +204,14 @@ where
         })
     }
 
+    /// Convenience function for `STATUS_REG` to confirm all three X, Y and
+    /// Z-axis have new data available for reading by accel_raw and associated
+    /// function calls
+    pub fn is_data_ready(&mut self) -> Result<bool, Error<E>> {
+        let value = self.get_status()?;
+        Ok(value.zyxda)
+    }
+
     /// Temperature sensor enable.
     /// `TEMP_CGF_REG`: `TEMP_EN`, the BDU bit in `CTRL_REG4` is also set
     pub fn enable_temp(&mut self, enable: bool) -> Result<(), Error<E>> {
