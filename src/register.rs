@@ -1,16 +1,13 @@
 use num_enum::TryFromPrimitive;
 
-/// Unique device identifier
-pub const DEVICE_ID: u8 = 0x33;
-
 /// Possible I²C slave addresses
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum SlaveAddr {
-    /// Default slave address (0x18)
+    /// Default slave address (`0x18`)
     Default = 0x18,
 
-    /// Alternate slave address (0x19)
+    /// Alternate slave address (`0x19`)
     Alternate = 0x19,
 }
 
@@ -102,6 +99,7 @@ impl Register {
     }
 }
 
+/// Full-scale selection
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -125,6 +123,7 @@ impl Range {
     }
 }
 
+/// Output data rate
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -166,9 +165,25 @@ impl DataRate {
     }
 }
 
+/// Data status structure. Decoded from `STATUS_REG` register.
+#[derive(Debug)]
+pub struct DataStatus {
+    /// ZYXOR bit
+    pub zyxor: bool,
+
+    /// (XOR, YOR, ZOR) bits
+    pub xyzor: (bool, bool, bool),
+
+    /// ZYXDA bit
+    pub zyxda: bool,
+
+    /// (XDA, YDA, ZDA) bits
+    pub xyzda: (bool, bool, bool),
+}
+
+/// Operating mode
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
-/// Operating mode
 pub enum Mode {
     /// High-resolution mode (12-bit data output)
     HighResolution,
@@ -179,3 +194,42 @@ pub enum Mode {
     /// Low-power mode (8-bit data output)
     LowPower,
 }
+
+// === WHO_AMI_I (0Fh) ===
+
+/// `WHO_AM_I` device identification register
+pub const DEVICE_ID: u8 = 0x33;
+
+// === TEMP_CFG_REG (1Fh) ===
+
+pub const ADC_EN: u8 = 0b1000_0000;
+pub const TEMP_EN: u8 = 0b0100_0000;
+
+// === CTRL_REG1 (20h) ===
+
+pub const ODR_MASK: u8 = 0b1111_0000;
+pub const LP_EN: u8 = 0b0000_1000;
+pub const Z_EN: u8 = 0b0000_0100;
+pub const Y_EN: u8 = 0b0000_0010;
+pub const X_EN: u8 = 0b0000_0001;
+
+// === CTRL_REG4 (23h) ===
+
+pub const BDU: u8 = 0b1000_0000;
+pub const FS_MASK: u8 = 0b0011_0000;
+pub const HR: u8 = 0b0000_1000;
+
+// === CTRL_REG5 (24h) ===
+
+pub const BOOT: u8 = 0b1000_0000;
+
+// === STATUS_REG (27h) ===
+
+pub const ZYXOR: u8 = 0b1000_0000;
+pub const ZOR: u8 = 0b0100_0000;
+pub const YOR: u8 = 0b0010_0000;
+pub const XOR: u8 = 0b0001_0000;
+pub const ZYXDA: u8 = 0b0000_1000;
+pub const ZDA: u8 = 0b0000_0100;
+pub const YDA: u8 = 0b0000_0010;
+pub const XDA: u8 = 0b0000_0001;
