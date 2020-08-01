@@ -26,11 +26,11 @@ pub enum Error<E> {
     /// I²C bus error
     I2C(E),
     /// Invalid input data.
-    WrongAddress,
-    WriteToReadOnly,
     InvalidDataRate,
     InvalidMode,
     InvalidRange,
+    WriteToReadOnly,
+    WrongAddress,
 }
 
 /// `LIS3DH` driver
@@ -58,14 +58,17 @@ where
             return Err(Error::WrongAddress);
         }
 
-        // Enable all axes, normal mode.
-        lis3dh.write_register(Register::CTRL1, 0x07)?;
-        // Set 400Hz data rate.
+        // Use normal mode.
+        lis3dh.set_mode(Mode::Normal)?;
+        // Set 400Hz output data rate.
         lis3dh.set_datarate(DataRate::Hz_400)?;
-        // High res & BDU enabled
-        lis3dh.write_register(Register::CTRL4, 0x88)?;
+        // Enable all axes.
+        lis3dh.enable_axis((true, true, true))?;
+
+        // Block data update & High-resolution output mode enabled
+        lis3dh.write_register(Register::CTRL4, BDU & HR)?;
         // Enable ADCs.
-        lis3dh.write_register(Register::TEMP_CFG, 0x80)?;
+        lis3dh.write_register(Register::TEMP_CFG, ADC_EN)?;
         // Latch interrupt for INT1
         lis3dh.write_register(Register::CTRL5, 0x08)?;
 
@@ -77,21 +80,35 @@ where
         self.read_register(Register::WHOAMI)
     }
 
+    /// X,Y,Z-axis enable.
+    /// `CTRL_REG1`: `Xen`, `Yen`, `Zen`
+    pub fn enable_axis(&mut self, (x, y, z): (bool, bool, bool)) -> Result<(), Error<E>> {
+        self.modify_register(Register::CTRL1, |mut ctrl1| {
+            ctrl1 &= !(X_EN | Y_EN | Z_EN); // disable all axes
+
+            ctrl1 |= if x { X_EN } else { 0 };
+            ctrl1 |= if y { Y_EN } else { 0 };
+            ctrl1 |= if z { Z_EN } else { 0 };
+
+            ctrl1
+        })
+    }
+
     /// Operating mode selection.
     /// `CTRL_REG1`: `LPen` bit, `CTRL_REG4`: `HR` bit
     pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E>> {
         match mode {
             Mode::LowPower => {
-                self.register_set_bits(Register::CTRL1, 0x8)?;
-                self.register_reset_bits(Register::CTRL4, 0x8)?;
+                self.register_set_bits(Register::CTRL1, LP_EN)?;
+                self.register_clear_bits(Register::CTRL4, HR)?;
             }
             Mode::Normal => {
-                self.register_reset_bits(Register::CTRL1, 0x8)?;
-                self.register_reset_bits(Register::CTRL4, 0x8)?;
+                self.register_clear_bits(Register::CTRL1, LP_EN)?;
+                self.register_clear_bits(Register::CTRL4, HR)?;
             }
             Mode::HighResolution => {
-                self.register_reset_bits(Register::CTRL1, 0x8)?;
-                self.register_set_bits(Register::CTRL4, 0x8)?;
+                self.register_clear_bits(Register::CTRL1, LP_EN)?;
+                self.register_set_bits(Register::CTRL4, HR)?;
             }
         }
 
@@ -103,8 +120,8 @@ where
         let ctrl1 = self.read_register(Register::CTRL1)?;
         let ctrl4 = self.read_register(Register::CTRL4)?;
 
-        let lp = (ctrl1 >> 3) & 0x1 != 0;
-        let hr = (ctrl4 >> 3) & 0x1 != 0;
+        let lp = (ctrl1 >> 3) & 0x01 != 0;
+        let hr = (ctrl4 >> 3) & 0x01 != 0;
 
         let mode = match (lp, hr) {
             (true, false) => Mode::LowPower,
@@ -120,9 +137,9 @@ where
     pub fn set_datarate(&mut self, datarate: DataRate) -> Result<(), Error<E>> {
         self.modify_register(Register::CTRL1, |mut ctrl1| {
             // Mask off lowest 4 bits
-            ctrl1 &= 0xF;
-            // Write in new data rate to highest 4 bits
-        ctrl1 |= datarate.bits() << 4;
+            ctrl1 &= !ODR_MASK;
+            // Write in new output data rate to highest 4 bits
+            ctrl1 |= datarate.bits() << 4;
 
             ctrl1
         })
@@ -133,38 +150,112 @@ where
         let ctrl1 = self.read_register(Register::CTRL1)?;
         let odr = (ctrl1 >> 4) & 0x0F;
 
-        match DataRate::try_from(odr) {
-            Ok(rate) => Ok(rate),
-            Err(_) => Err(Error::InvalidDataRate),
-        }
+        DataRate::try_from(odr).map_err(|_| Error::InvalidDataRate)
     }
 
-    /// Range selection
+    /// High-resolution output mode.
+    /// `CTRL_REG4`: `HR`
+    pub fn set_hr(&mut self, hr: bool) -> Result<(), Error<E>> {
+        self.register_xset_bits(Register::CTRL4, HR, hr)
+    }
+
+    /// Full-scale selection
     pub fn set_range(&mut self, range: Range) -> Result<(), Error<E>> {
         self.modify_register(Register::CTRL4, |mut ctrl4| {
             // Mask off lowest 4 bits
-            ctrl4 &= !0x30;
-            // Write in new range to highest 4 bits
-        ctrl4 |= range.bits() << 4;
+            ctrl4 &= !FS_MASK;
+            // Write in new full-scale to highest 4 bits
+            ctrl4 |= range.bits() << 4;
 
             ctrl4
         })
     }
 
-    /// Read the current range
+    /// Read the current full-scale
     pub fn get_range(&mut self) -> Result<Range, Error<E>> {
         let ctrl4 = self.read_register(Register::CTRL4)?;
         let fs = (ctrl4 >> 4) & 0x03;
 
-        match Range::try_from(fs) {
-            Ok(range) => Ok(range),
-            Err(_) => Err(Error::InvalidRange),
+        Range::try_from(fs).map_err(|_| Error::InvalidRange)
+    }
+
+    /// Set `REFERENCE` register
+    pub fn set_ref(&mut self, reference: u8) -> Result<(), Error<E>> {
+        self.write_register(Register::REFERENCE, reference)
+    }
+
+    /// Read the `REFERENCE` register
+    pub fn get_ref(&mut self) -> Result<u8, Error<E>> {
+        self.read_register(Register::REFERENCE)
+    }
+
+    /// Data status.
+    /// `STATUS_REG`: as
+    /// DataStatus { zyxor: `ZYXOR`, xyzor: (`XOR`, `YOR`, `ZOR`),
+    ///              zyxda: `ZYXDA`, xyzda: (`XDA`, `YDA`, `ZDA`) }
+    pub fn get_status(&mut self) -> Result<DataStatus, Error<E>> {
+        let stat = self.read_register(Register::STATUS)?;
+
+        Ok(DataStatus {
+            zyxor: (stat & ZYXOR) != 0,
+            xyzor: ((stat & XOR) != 0, (stat & YOR) != 0, (stat & ZOR) != 0),
+            zyxda: (stat & ZYXDA) != 0,
+            xyzda: ((stat & XDA) != 0, (stat & YDA) != 0, (stat & ZDA) != 0),
+        })
+    }
+
+    /// Temperature sensor enable.
+    /// `TEMP_CGF_REG`: `TEMP_EN`, the BDU bit in `CTRL_REG4` is also set
+    pub fn enable_temp(&mut self, enable: bool) -> Result<(), Error<E>> {
+        self.register_xset_bits(Register::TEMP_CFG, TEMP_EN, enable)?;
+
+        // enable block data update (required for temp reading)
+        if enable {
+            self.register_xset_bits(Register::CTRL4, BDU, true)?;
         }
+
+        Ok(())
+    }
+
+    /// Temperature sensor data.
+    /// `OUT_TEMP_H`, `OUT_TEMP_L`
+    pub fn get_temp_out(&mut self) -> Result<(i8, u8), Error<E>> {
+        let out_l = self.read_register(Register::OUT_ADC2_L)?;
+        let out_h = self.read_register(Register::OUT_ADC2_H)?;
+
+        Ok((out_h as i8, out_l))
+    }
+
+    /// Temperature sensor data converted to f32.
+    /// `OUT_TEMP_H`, `OUT_TEMP_L`
+    pub fn get_temp_outf(&mut self) -> Result<f32, Error<E>> {
+        let (out_h, out_l) = self.get_temp_out()?;
+        // 10-bit resolution
+        let value = ((out_h as i16) << 2) | ((out_l as i16) >> 6);
+
+        Ok((value as f32) * 0.25)
+    }
+
+    /// Reboot memory content.
+    /// `CTRL_REG5`: `BOOT`
+    pub fn reboot(&mut self, reboot: bool) -> Result<(), Error<E>> {
+        self.register_xset_bits(Register::CTRL5, BOOT, reboot)
+    }
+
+    /// In boot,
+    /// `CTRL_REG5`: `BOOT`
+    pub fn is_in_boot(&mut self) -> Result<bool, Error<E>> {
+        let ctrl5 = self.read_register(Register::CTRL5)?;
+
+        Ok((ctrl5 & BOOT) != 0)
     }
 
     /// Use this accelerometer as an orientation tracker
     pub fn try_into_tracker(&mut self) -> Result<Tracker, Error<E>> {
         self.set_range(Range::G8)?;
+
+        // The `threshold` value was obtained experimentally, as per the
+        // recommendations made in the datasheet.
         Ok(Tracker::new(3700.0))
     }
 
@@ -174,17 +265,23 @@ where
         F: FnOnce(u8) -> u8,
     {
         let value = self.read_register(register)?;
-        self.write_register(register, f(value))?;
-
-        Ok(())
+        self.write_register(register, f(value))
     }
 
-    fn register_reset_bits(&mut self, reg: Register, bits: u8) -> Result<(), Error<E>> {
+    fn register_clear_bits(&mut self, reg: Register, bits: u8) -> Result<(), Error<E>> {
         self.modify_register(reg, |v| v & !bits)
     }
 
     fn register_set_bits(&mut self, reg: Register, bits: u8) -> Result<(), Error<E>> {
         self.modify_register(reg, |v| v | bits)
+    }
+
+    fn register_xset_bits(&mut self, reg: Register, bits: u8, set: bool) -> Result<(), Error<E>> {
+        if set {
+            self.register_set_bits(reg, bits)
+        } else {
+            self.register_clear_bits(reg, bits)
+        }
     }
 
     /// Read from the registers for each of the 3 axes
@@ -220,7 +317,7 @@ where
 }
 
 impl<I2C, E> Accelerometer for Lis3dh<I2C>
-    where 
+where
     I2C: WriteRead<Error = E> + Write<Error = E>,
     E: Debug,
 {
