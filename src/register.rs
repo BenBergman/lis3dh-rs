@@ -165,7 +165,23 @@ impl DataRate {
     }
 }
 
-/// Data status structure. Decoded from `STATUS_REG` register.
+/// Data status structure. Decoded from the `STATUS_REG` register.
+///
+/// `STATUS_REG` has the following bit fields:
+///   * `ZYXOR` - X, Y and Z-axis data overrun
+///   * `ZOR` - Z-axis data overrun
+///   * `YOR` - Y-axis data overrun
+///   * `XOR` - X-axis data overrun
+///   * `ZYXDA` - X, Y and Z-axis new data available
+///   * `ZDA` - Z-axis new data available
+///   * `YDA` Y-axis new data available
+///   * `XDA` X-axis new data available
+///
+/// This struct splits the fields into more convenient groups:
+///  * `zyxor` -> `ZYXOR`
+///  * `xyzor` -> (`XOR`, `YOR`, `ZOR`)
+///  * `zyxda` -> `ZYXDA`
+///  * `xyzda` -> (`XDA`, `YDA`, `ZDA`)
 #[derive(Debug)]
 pub struct DataStatus {
     /// ZYXOR bit
