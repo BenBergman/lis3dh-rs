@@ -122,7 +122,7 @@ where
             // Mask off lowest 4 bits
             ctrl1 &= 0xF;
             // Write in new data rate to highest 4 bits
-        ctrl1 |= datarate.bits() << 4;
+            ctrl1 |= datarate.bits() << 4;
 
             ctrl1
         })
@@ -145,7 +145,7 @@ where
             // Mask off lowest 4 bits
             ctrl4 &= !0x30;
             // Write in new range to highest 4 bits
-        ctrl4 |= range.bits() << 4;
+            ctrl4 |= range.bits() << 4;
 
             ctrl4
         })
@@ -187,6 +187,11 @@ where
         self.modify_register(reg, |v| v | bits)
     }
 
+    pub fn data_is_ready(&mut self) -> Result<bool, Error<E>> {
+        let value = self.read_register(Register::STATUS)?;
+        Ok(value & 0b00000100 == 0b00000100)
+    }
+
     /// Read from the registers for each of the 3 axes
     fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<E>> {
         let mut data = [0u8; 6];
@@ -220,7 +225,7 @@ where
 }
 
 impl<I2C, E> Accelerometer for Lis3dh<I2C>
-    where 
+where
     I2C: WriteRead<Error = E> + Write<Error = E>,
     E: Debug,
 {
