@@ -252,7 +252,7 @@ where
 
     /// In boot,
     /// `CTRL_REG5`: `BOOT`
-    pub fn in_boot(&mut self) -> Result<bool, Error<E>> {
+    pub fn is_in_boot(&mut self) -> Result<bool, Error<E>> {
         let ctrl5 = self.read_register(Register::CTRL5)?;
 
         Ok((ctrl5 & BOOT) != 0)
