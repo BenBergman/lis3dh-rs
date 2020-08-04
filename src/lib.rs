@@ -244,20 +244,6 @@ where
         Ok((value as f32) * 0.25)
     }
 
-    /// Reboot memory content.
-    /// `CTRL_REG5`: `BOOT`
-    pub fn reboot(&mut self, reboot: bool) -> Result<(), Error<E>> {
-        self.register_xset_bits(Register::CTRL5, BOOT, reboot)
-    }
-
-    /// In boot,
-    /// `CTRL_REG5`: `BOOT`
-    pub fn is_in_boot(&mut self) -> Result<bool, Error<E>> {
-        let ctrl5 = self.read_register(Register::CTRL5)?;
-
-        Ok((ctrl5 & BOOT) != 0)
-    }
-
     /// Use this accelerometer as an orientation tracker
     pub fn try_into_tracker(&mut self) -> Result<Tracker, Error<E>> {
         self.set_range(Range::G8)?;
