@@ -335,7 +335,9 @@ where
 {
     type Error = Error<E>;
 
-    /// Get normalized ±g reading from the accelerometer
+    /// Get normalized ±g reading from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`
     fn accel_norm(&mut self) -> Result<F32x3, AccelerometerError<Self::Error>> {
         let acc_raw: I16x3 = self.accel_raw()?;
         let sensitivity = match self.get_range()? {
@@ -384,7 +386,9 @@ where
 {
     type Error = Error<E>;
 
-    /// Get raw acceleration data from the accelerometer.
+    /// Get raw acceleration data from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`
     fn accel_raw(&mut self) -> Result<I16x3, AccelerometerError<Self::Error>> {
         let accel_bytes = self.read_accel_bytes()?;
 
