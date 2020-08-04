@@ -12,7 +12,6 @@
 use core::convert::{TryFrom, TryInto};
 use core::fmt::Debug;
 
-use accelerometer;
 use accelerometer::error::Error as AccelerometerError;
 use accelerometer::vector::{F32x3, I16x3};
 use accelerometer::{Accelerometer, RawAccelerometer, Tracker};
@@ -357,13 +356,6 @@ where
     /// Get the sample rate of the accelerometer data
     fn sample_rate(&mut self) -> Result<f32, AccelerometerError<Self::Error>> {
         let sample_rate = match self.get_datarate()? {
-            DataRate::Hz_1344_LP5k => {
-                if self.get_mode()? == Mode::LowPower {
-                    5376.0
-                } else {
-                    1344.0
-                }
-            }
             DataRate::Hz_400 => 400.0,
             DataRate::Hz_200 => 200.0,
             DataRate::Hz_100 => 100.0,
@@ -372,7 +364,6 @@ where
             DataRate::Hz_10 => 10.0,
             DataRate::Hz_1 => 1.0,
             DataRate::PowerDown => 0.0,
-            DataRate::LowPower_1K6HZ => 1600.0,
         };
 
         Ok(sample_rate)
