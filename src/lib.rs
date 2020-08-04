@@ -98,7 +98,15 @@ where
     }
 
     /// Operating mode selection.
-    /// `CTRL_REG1`: `LPen` bit, `CTRL_REG4`: `HR` bit
+    /// `CTRL_REG1`: `LPen` bit, `CTRL_REG4`: `HR` bit.
+    /// You need to wait for stabilization after setting. In future this fn will
+    /// be deprecated and instead take a delay to do this for you.
+    /// HighResolution to LowPower 1/datarate
+    /// HighResolution -> Normal 1/datarate
+    /// Normal -> LowPower 1/datarate
+    /// Normal -> HighResolution 7/datarate
+    /// LowPower -> Normal 1/datarate
+    /// LowPower -> HighResolution 7/datarate
     pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E>> {
         match mode {
             Mode::LowPower => {
