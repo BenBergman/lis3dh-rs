@@ -47,7 +47,10 @@ where
     I2C: WriteRead<Error = E> + Write<Error = E>,
     E: Debug,
 {
-    /// Create a new LIS3DH driver from the given I2C peripheral
+    /// Create a new LIS3DH driver from the given I2C peripheral. Default is
+    /// Hz_400 HighResolution. Note currently latches interrupt for INT1 by
+    /// default but that is deprecated and will need to be done manulaly by user
+    /// in future.
     pub fn new(i2c: I2C, address: SlaveAddr) -> Result<Self, Error<E>> {
         let mut lis3dh = Lis3dh {
             i2c,
@@ -58,17 +61,18 @@ where
             return Err(Error::WrongAddress);
         }
 
-        // Use normal mode.
-        lis3dh.set_mode(Mode::Normal)?;
-        // Set 400Hz output data rate.
+        // Block data update
+        lis3dh.write_register(Register::CTRL4, BDU)?;
+
+        lis3dh.set_mode(Mode::HighResolution)?;
+
         lis3dh.set_datarate(DataRate::Hz_400)?;
-        // Enable all axes.
+
         lis3dh.enable_axis((true, true, true))?;
 
-        // Block data update & High-resolution output mode enabled
-        lis3dh.write_register(Register::CTRL4, BDU & HR)?;
         // Enable ADCs.
         lis3dh.write_register(Register::TEMP_CFG, ADC_EN)?;
+
         // Latch interrupt for INT1
         lis3dh.write_register(Register::CTRL5, 0x08)?;
 
