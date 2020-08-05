@@ -14,7 +14,7 @@ use core::fmt::Debug;
 
 use accelerometer::error::Error as AccelerometerError;
 use accelerometer::vector::{F32x3, I16x3};
-use accelerometer::{Accelerometer, RawAccelerometer, Tracker};
+use accelerometer::{Accelerometer, RawAccelerometer};
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
 mod register;
@@ -242,15 +242,6 @@ where
         let value = ((out_h as i16) << 2) | ((out_l as i16) >> 6);
 
         Ok((value as f32) * 0.25)
-    }
-
-    /// Use this accelerometer as an orientation tracker
-    pub fn try_into_tracker(&mut self) -> Result<Tracker, Error<E>> {
-        self.set_range(Range::G8)?;
-
-        // The `threshold` value was obtained experimentally, as per the
-        // recommendations made in the datasheet.
-        Ok(Tracker::new(3700.0))
     }
 
     /// Modify a register's value
