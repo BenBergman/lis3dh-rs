@@ -87,11 +87,6 @@ where
         Ok(lis3dh)
     }
 
-    /// Destroy driver instance, returning `I2C` bus instance.
-    pub fn destroy(self) -> I2C {
-        self.i2c
-    }
-
     /// `WHO_AM_I` register.
     pub fn get_device_id(&mut self) -> Result<u8, Error<E>> {
         self.read_register(Register::WHOAMI)
