@@ -99,7 +99,7 @@ where
 
     /// X,Y,Z-axis enable.
     /// `CTRL_REG1`: `Xen`, `Yen`, `Zen`
-    pub fn enable_axis(&mut self, (x, y, z): (bool, bool, bool)) -> Result<(), Error<E>> {
+    fn enable_axis(&mut self, (x, y, z): (bool, bool, bool)) -> Result<(), Error<E>> {
         self.modify_register(Register::CTRL1, |mut ctrl1| {
             ctrl1 &= !(X_EN | Y_EN | Z_EN); // disable all axes
 
@@ -368,7 +368,9 @@ where
 
         // Depending on which Mode we are operating in, the data has different
         // resolution. Using this knowledge, we determine how many bits the
-        // data needs to be shifted.
+        // data needs to be shifted. This is necessary because the raw data
+        // is in left-justified two's complement and we would like for it to be
+        // right-justified instead.
         let shift: u8 = match mode {
             Mode::HighResolution => 4, // High Resolution:  12-bit
             Mode::Normal => 6,         // Normal:           10-bit
