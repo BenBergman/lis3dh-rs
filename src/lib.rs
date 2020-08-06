@@ -13,13 +13,15 @@
 use core::convert::{TryFrom, TryInto};
 use core::fmt::Debug;
 
+pub use accelerometer;
 use accelerometer::error::Error as AccelerometerError;
 use accelerometer::vector::{F32x3, I16x3};
 use accelerometer::{Accelerometer, RawAccelerometer};
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
 mod register;
-pub use register::*;
+use register::*;
+pub use register::{DataRate, DataStatus, Mode, Range, SlaveAddr};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
