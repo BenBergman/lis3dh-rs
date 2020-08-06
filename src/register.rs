@@ -1,6 +1,6 @@
 use num_enum::TryFromPrimitive;
 
-/// Possible I²C slave addresses
+/// Possible I²C slave addresses.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum SlaveAddr {
@@ -17,8 +17,8 @@ impl SlaveAddr {
     }
 }
 
-/// Enumerate all device registers
-#[allow(non_camel_case_types)]
+/// Enumerate all device registers.
+#[allow(dead_code, non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Register {
@@ -99,7 +99,7 @@ impl Register {
     }
 }
 
-/// Full-scale selection
+/// Full-scale selection.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -123,7 +123,7 @@ impl Range {
     }
 }
 
-/// Output data rate
+/// Output data rate.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -204,7 +204,7 @@ pub struct DataStatus {
     pub xyzda: (bool, bool, bool),
 }
 
-/// Operating mode
+/// Operating mode.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Mode {
@@ -241,10 +241,6 @@ pub const X_EN: u8 = 0b0000_0001;
 pub const BDU: u8 = 0b1000_0000;
 pub const FS_MASK: u8 = 0b0011_0000;
 pub const HR: u8 = 0b0000_1000;
-
-// === CTRL_REG5 (24h) ===
-
-pub const BOOT: u8 = 0b1000_0000;
 
 // === STATUS_REG (27h) ===
 
