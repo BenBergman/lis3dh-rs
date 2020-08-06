@@ -151,12 +151,6 @@ pub enum DataRate {
 
     /// Power down
     PowerDown = 0b0000,
-
-    /// Low power mode (1.6KHz)
-    LowPower_1K6HZ = 0b1000,
-
-    /// # Normal power mode (1344Hz) / Low power mode (5KHz)
-    Hz_1344_LP5k = 0b1001,
 }
 
 impl DataRate {

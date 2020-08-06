@@ -4,7 +4,7 @@
 use circuit_playground_express as hal;
 extern crate panic_halt;
 
-use accelerometer::RawAccelerometer;
+use accelerometer::{RawAccelerometer, Tracker};
 use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
 use hal::clock::GenericClockController;
@@ -42,7 +42,7 @@ fn main() -> ! {
     lis3dh.set_range(lis3dh::Range::G8).unwrap();
     let mut delay = Delay::new(core.SYST, &mut clocks);
 
-    let mut tracker = lis3dh.try_into_tracker().unwrap();
+    let mut tracker = Tracker::new(3700.0);
 
     loop {
         let accel = lis3dh.accel_raw().unwrap();

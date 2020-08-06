@@ -12,10 +12,9 @@
 use core::convert::{TryFrom, TryInto};
 use core::fmt::Debug;
 
-use accelerometer;
 use accelerometer::error::Error as AccelerometerError;
 use accelerometer::vector::{F32x3, I16x3};
-use accelerometer::{Accelerometer, RawAccelerometer, Tracker};
+use accelerometer::{Accelerometer, RawAccelerometer};
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
 mod register;
@@ -47,7 +46,8 @@ where
     I2C: WriteRead<Error = E> + Write<Error = E>,
     E: Debug,
 {
-    /// Create a new LIS3DH driver from the given I2C peripheral
+    /// Create a new LIS3DH driver from the given I2C peripheral. Default is
+    /// Hz_400 HighResolution.
     pub fn new(i2c: I2C, address: SlaveAddr) -> Result<Self, Error<E>> {
         let mut lis3dh = Lis3dh {
             i2c,
@@ -58,19 +58,17 @@ where
             return Err(Error::WrongAddress);
         }
 
-        // Use normal mode.
-        lis3dh.set_mode(Mode::Normal)?;
-        // Set 400Hz output data rate.
+        // Block data update
+        lis3dh.write_register(Register::CTRL4, BDU)?;
+
+        lis3dh.set_mode(Mode::HighResolution)?;
+
         lis3dh.set_datarate(DataRate::Hz_400)?;
-        // Enable all axes.
+
         lis3dh.enable_axis((true, true, true))?;
 
-        // Block data update & High-resolution output mode enabled
-        lis3dh.write_register(Register::CTRL4, BDU & HR)?;
         // Enable ADCs.
         lis3dh.write_register(Register::TEMP_CFG, ADC_EN)?;
-        // Latch interrupt for INT1
-        lis3dh.write_register(Register::CTRL5, 0x08)?;
 
         Ok(lis3dh)
     }
@@ -95,7 +93,15 @@ where
     }
 
     /// Operating mode selection.
-    /// `CTRL_REG1`: `LPen` bit, `CTRL_REG4`: `HR` bit
+    /// `CTRL_REG1`: `LPen` bit, `CTRL_REG4`: `HR` bit.
+    /// You need to wait for stabilization after setting. In future this fn will
+    /// be deprecated and instead take a delay to do this for you.
+    /// HighResolution to LowPower 1/datarate
+    /// HighResolution -> Normal 1/datarate
+    /// Normal -> LowPower 1/datarate
+    /// Normal -> HighResolution 7/datarate
+    /// LowPower -> Normal 1/datarate
+    /// LowPower -> HighResolution 7/datarate
     pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E>> {
         match mode {
             Mode::LowPower => {
@@ -151,12 +157,6 @@ where
         let odr = (ctrl1 >> 4) & 0x0F;
 
         DataRate::try_from(odr).map_err(|_| Error::InvalidDataRate)
-    }
-
-    /// High-resolution output mode.
-    /// `CTRL_REG4`: `HR`
-    pub fn set_hr(&mut self, hr: bool) -> Result<(), Error<E>> {
-        self.register_xset_bits(Register::CTRL4, HR, hr)
     }
 
     /// Full-scale selection
@@ -244,29 +244,6 @@ where
         Ok((value as f32) * 0.25)
     }
 
-    /// Reboot memory content.
-    /// `CTRL_REG5`: `BOOT`
-    pub fn reboot(&mut self, reboot: bool) -> Result<(), Error<E>> {
-        self.register_xset_bits(Register::CTRL5, BOOT, reboot)
-    }
-
-    /// In boot,
-    /// `CTRL_REG5`: `BOOT`
-    pub fn is_in_boot(&mut self) -> Result<bool, Error<E>> {
-        let ctrl5 = self.read_register(Register::CTRL5)?;
-
-        Ok((ctrl5 & BOOT) != 0)
-    }
-
-    /// Use this accelerometer as an orientation tracker
-    pub fn try_into_tracker(&mut self) -> Result<Tracker, Error<E>> {
-        self.set_range(Range::G8)?;
-
-        // The `threshold` value was obtained experimentally, as per the
-        // recommendations made in the datasheet.
-        Ok(Tracker::new(3700.0))
-    }
-
     /// Modify a register's value
     fn modify_register<F>(&mut self, register: Register, f: F) -> Result<(), Error<E>>
     where
@@ -331,7 +308,9 @@ where
 {
     type Error = Error<E>;
 
-    /// Get normalized ±g reading from the accelerometer
+    /// Get normalized ±g reading from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`
     fn accel_norm(&mut self) -> Result<F32x3, AccelerometerError<Self::Error>> {
         let acc_raw: I16x3 = self.accel_raw()?;
         let sensitivity = match self.get_range()? {
@@ -351,13 +330,6 @@ where
     /// Get the sample rate of the accelerometer data
     fn sample_rate(&mut self) -> Result<f32, AccelerometerError<Self::Error>> {
         let sample_rate = match self.get_datarate()? {
-            DataRate::Hz_1344_LP5k => {
-                if self.get_mode()? == Mode::LowPower {
-                    5376.0
-                } else {
-                    1344.0
-                }
-            }
             DataRate::Hz_400 => 400.0,
             DataRate::Hz_200 => 200.0,
             DataRate::Hz_100 => 100.0,
@@ -366,7 +338,6 @@ where
             DataRate::Hz_10 => 10.0,
             DataRate::Hz_1 => 1.0,
             DataRate::PowerDown => 0.0,
-            DataRate::LowPower_1K6HZ => 1600.0,
         };
 
         Ok(sample_rate)
@@ -380,7 +351,9 @@ where
 {
     type Error = Error<E>;
 
-    /// Get raw acceleration data from the accelerometer.
+    /// Get raw acceleration data from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`
     fn accel_raw(&mut self) -> Result<I16x3, AccelerometerError<Self::Error>> {
         let accel_bytes = self.read_accel_bytes()?;
 
