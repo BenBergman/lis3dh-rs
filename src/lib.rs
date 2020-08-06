@@ -54,6 +54,40 @@ pub struct Lis3dh<I2C> {
     /// Current I²C slave address
     address: u8,
 }
+pub struct Lis3dhTemperature<I2C> {
+    lis3dh: Lis3dh<I2C>,
+}
+
+trait Temperature<E>
+where
+    E: Debug,
+{
+    fn get_temp_out(&mut self) -> Result<(i8, u8), Error<E>>;
+    fn get_temp_outf(&mut self) -> Result<f32, Error<E>>;
+}
+
+impl<I2C, E> Temperature<E> for Lis3dhTemperature<I2C>
+where
+    I2C: WriteRead<Error = E> + Write<Error = E>,
+    E: Debug,
+{
+    fn get_temp_out(&mut self) -> Result<(i8, u8), Error<E>> {
+        let out_l = self.lis3dh.read_register(Register::OUT_ADC2_L)?;
+        let out_h = self.lis3dh.read_register(Register::OUT_ADC2_H)?;
+
+        Ok((out_h as i8, out_l))
+    }
+
+    /// Temperature sensor data converted to f32.
+    /// `OUT_TEMP_H`, `OUT_TEMP_L`
+    fn get_temp_outf(&mut self) -> Result<f32, Error<E>> {
+        let (out_h, out_l) = self.get_temp_out()?;
+        // 10-bit resolution
+        let value = ((out_h as i16) << 2) | ((out_l as i16) >> 6);
+
+        Ok((value as f32) * 0.25)
+    }
+}
 
 impl<I2C, E> Lis3dh<I2C>
 where
@@ -62,6 +96,7 @@ where
 {
     /// Create a new LIS3DH driver from the given I2C peripheral. Default is
     /// Hz_400 HighResolution.
+    // todo we need to 'boot' on startup because we have destroy now.
     pub fn new(i2c: I2C, address: SlaveAddr) -> Result<Self, Error<E>> {
         let mut lis3dh = Lis3dh {
             i2c,
@@ -229,34 +264,15 @@ where
     }
 
     /// Temperature sensor enable.
-    /// `TEMP_CGF_REG`: `TEMP_EN`, the BDU bit in `CTRL_REG4` is also set.
-    pub fn enable_temp(&mut self, enable: bool) -> Result<(), Error<E>> {
-        self.register_xset_bits(Register::TEMP_CFG, ADC_EN & TEMP_EN, enable)?;
+    /// `TEMP_CGF_REG`: `TEMP_EN`, the BDU bit in `CTRL_REG4` is also set
+    // Enables BDU if its not already. Must destroy to get i2c back and re-create to disable
+    pub fn try_into_temperature(mut self) -> Result<Lis3dhTemperature<I2C>, Error<E>> {
+        self.register_xset_bits(Register::TEMP_CFG, TEMP_EN, true)?;
 
         // enable block data update (required for temp reading)
-        if enable {
-            self.register_xset_bits(Register::CTRL4, BDU, true)?;
-        }
+        self.register_xset_bits(Register::CTRL4, BDU, true)?;
 
-        Ok(())
-    }
-
-    /// Raw temperature sensor data as `i16`. The temperature sensor __must__
-    /// be enabled via `enable_temp` prior to reading.
-    pub fn get_temp_out(&mut self) -> Result<i16, Error<E>> {
-        let out_l = self.read_register(Register::OUT_ADC3_L)?;
-        let out_h = self.read_register(Register::OUT_ADC3_H)?;
-
-        Ok(i16::from_le_bytes([out_l, out_h]))
-    }
-
-    /// Temperature sensor data converted to `f32`. Output is in degree
-    /// celsius. The temperature sensor __must__ be enabled via `enable_temp`
-    /// prior to reading.
-    pub fn get_temp_outf(&mut self) -> Result<f32, Error<E>> {
-        let temp_out = self.get_temp_out()?;
-
-        Ok(temp_out as f32 / 256.0 + 25.0)
+        Ok(Lis3dhTemperature { lis3dh: self })
     }
 
     /// Modify a register's value. Read the current value of the register,
@@ -398,6 +414,27 @@ where
     /// waiting for `is_data_ready`.
     fn accel_raw(&mut self) -> Result<I16x3, AccelerometerError<Self::Error>> {
         let accel_bytes = self.read_accel_bytes()?;
+
+        let x = i16::from_le_bytes(accel_bytes[0..2].try_into().unwrap());
+        let y = i16::from_le_bytes(accel_bytes[2..4].try_into().unwrap());
+        let z = i16::from_le_bytes(accel_bytes[4..6].try_into().unwrap());
+
+        Ok(I16x3::new(x, y, z))
+    }
+}
+
+impl<I2C, E> RawAccelerometer<I16x3> for Lis3dhTemperature<I2C>
+where
+    I2C: WriteRead<Error = E> + Write<Error = E>,
+    E: Debug,
+{
+    type Error = Error<E>;
+
+    /// Get raw acceleration data from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`.
+    fn accel_raw(&mut self) -> Result<I16x3, AccelerometerError<Self::Error>> {
+        let accel_bytes = self.lis3dh.read_accel_bytes()?;
 
         let x = i16::from_le_bytes(accel_bytes[0..2].try_into().unwrap());
         let y = i16::from_le_bytes(accel_bytes[2..4].try_into().unwrap());
