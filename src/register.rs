@@ -1,6 +1,6 @@
 use num_enum::TryFromPrimitive;
 
-/// Possible I²C slave addresses
+/// Possible I²C slave addresses.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum SlaveAddr {
@@ -17,8 +17,8 @@ impl SlaveAddr {
     }
 }
 
-/// Enumerate all device registers
-#[allow(non_camel_case_types)]
+/// Enumerate all device registers.
+#[allow(dead_code, non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Register {
@@ -99,7 +99,7 @@ impl Register {
     }
 }
 
-/// Full-scale selection
+/// Full-scale selection.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -123,7 +123,7 @@ impl Range {
     }
 }
 
-/// Output data rate
+/// Output data rate.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -156,6 +156,19 @@ pub enum DataRate {
 impl DataRate {
     pub fn bits(self) -> u8 {
         self as u8
+    }
+
+    pub fn sample_rate(self) -> f32 {
+        match self {
+            DataRate::Hz_400 => 400.0,
+            DataRate::Hz_200 => 200.0,
+            DataRate::Hz_100 => 100.0,
+            DataRate::Hz_50 => 50.0,
+            DataRate::Hz_25 => 25.0,
+            DataRate::Hz_10 => 10.0,
+            DataRate::Hz_1 => 1.0,
+            DataRate::PowerDown => 0.0,
+        }
     }
 }
 
@@ -191,7 +204,7 @@ pub struct DataStatus {
     pub xyzda: (bool, bool, bool),
 }
 
-/// Operating mode
+/// Operating mode.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Mode {
@@ -228,10 +241,6 @@ pub const X_EN: u8 = 0b0000_0001;
 pub const BDU: u8 = 0b1000_0000;
 pub const FS_MASK: u8 = 0b0011_0000;
 pub const HR: u8 = 0b0000_1000;
-
-// === CTRL_REG5 (24h) ===
-
-pub const BOOT: u8 = 0b1000_0000;
 
 // === STATUS_REG (27h) ===
 
