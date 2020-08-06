@@ -157,6 +157,19 @@ impl DataRate {
     pub fn bits(self) -> u8 {
         self as u8
     }
+
+    pub fn sample_rate(self) -> f32 {
+        match self {
+            DataRate::Hz_400 => 400.0,
+            DataRate::Hz_200 => 200.0,
+            DataRate::Hz_100 => 100.0,
+            DataRate::Hz_50 => 50.0,
+            DataRate::Hz_25 => 25.0,
+            DataRate::Hz_10 => 10.0,
+            DataRate::Hz_1 => 1.0,
+            DataRate::PowerDown => 0.0,
+        }
+    }
 }
 
 /// Data status structure. Decoded from the `STATUS_REG` register.

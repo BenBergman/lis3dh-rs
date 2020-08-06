@@ -312,35 +312,53 @@ where
     /// based on data ready interrupt or if reading in a tight loop you should
     /// waiting for `is_data_ready`
     fn accel_norm(&mut self) -> Result<F32x3, AccelerometerError<Self::Error>> {
-        let acc_raw: I16x3 = self.accel_raw()?;
-        let sensitivity = match self.get_range()? {
-            Range::G16 => 0.012,
-            Range::G8 => 0.004,
-            Range::G4 => 0.002,
-            Range::G2 => 0.001,
+        // The official driver from ST was used as a reference.
+        // https://github.com/STMicroelectronics/STMems_Standard_C_drivers/tree/master/lis3dh_STdC
+        let mode = self.get_mode()?;
+        let range = self.get_range()?;
+
+        // See "2.1 Mechanical characteristics" in the datasheet to find the
+        // values below. Scale values have all been divided by 1000 in order
+        // to convert the resulting values from mG to G, while avoiding doing
+        // any actual division on the hardware.
+        let scale = match (mode, range) {
+            // High Resolution mode
+            (Mode::HighResolution, Range::G2) => 0.001,
+            (Mode::HighResolution, Range::G4) => 0.002,
+            (Mode::HighResolution, Range::G8) => 0.004,
+            (Mode::HighResolution, Range::G16) => 0.012,
+            // Normal mode
+            (Mode::Normal, Range::G2) => 0.004,
+            (Mode::Normal, Range::G4) => 0.008,
+            (Mode::Normal, Range::G8) => 0.016,
+            (Mode::Normal, Range::G16) => 0.048,
+            // Low Power mode
+            (Mode::LowPower, Range::G2) => 0.016,
+            (Mode::LowPower, Range::G4) => 0.032,
+            (Mode::LowPower, Range::G8) => 0.064,
+            (Mode::LowPower, Range::G16) => 0.192,
         };
 
-        Ok(F32x3::new(
-            (acc_raw.x >> 4) as f32 * sensitivity,
-            (acc_raw.y >> 4) as f32 * sensitivity,
-            (acc_raw.z >> 4) as f32 * sensitivity,
-        ))
+        // Depending on which Mode we are operating in, the data has different
+        // resolution. Using this knowledge, we determine how many bits the
+        // data needs to be shifted.
+        let shift: u8 = match mode {
+            Mode::HighResolution => 4, // High Resolution:  12-bit
+            Mode::Normal => 6,         // Normal:           10-bit
+            Mode::LowPower => 8,       // Low Power:         8-bit
+        };
+
+        let acc_raw = self.accel_raw()?;
+        let x = (acc_raw.x >> shift) as f32 * scale;
+        let y = (acc_raw.y >> shift) as f32 * scale;
+        let z = (acc_raw.z >> shift) as f32 * scale;
+
+        Ok(F32x3::new(x, y, z))
     }
 
     /// Get the sample rate of the accelerometer data
     fn sample_rate(&mut self) -> Result<f32, AccelerometerError<Self::Error>> {
-        let sample_rate = match self.get_datarate()? {
-            DataRate::Hz_400 => 400.0,
-            DataRate::Hz_200 => 200.0,
-            DataRate::Hz_100 => 100.0,
-            DataRate::Hz_50 => 50.0,
-            DataRate::Hz_25 => 25.0,
-            DataRate::Hz_10 => 10.0,
-            DataRate::Hz_1 => 1.0,
-            DataRate::PowerDown => 0.0,
-        };
-
-        Ok(sample_rate)
+        Ok(self.get_datarate()?.sample_rate())
     }
 }
 
