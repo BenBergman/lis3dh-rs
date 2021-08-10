@@ -64,13 +64,11 @@ where
         data: &[u8],
     ) -> Result<(), Error<ESPI, ENSS>> {
         self.nss_turn_on()?;
-        self.delay.delay_us(1);
         let res = self
             .spi
             .write(&[start_register.addr() | 0x40])
             .and_then(|_| self.spi.write(data))
             .map_err(Error::Bus);
-        self.delay.delay_us(1);
         self.nss_turn_off()?;
         res
     }
@@ -82,15 +80,11 @@ where
         buf: &mut [u8],
     ) -> Result<(), Error<ESPI, ENSS>> {
         self.nss_turn_on()?;
-        self.delay.delay_us(1);
         self.spi
             .write(&[start_register.addr() | 0xC0])
             .and_then(|_| self.spi.transfer(buf))
             .map_err(Error::Bus)
-            .map(|_| {
-                self.delay.delay_us(1);
-                self.nss_turn_off()
-            })?
+            .map(|_| self.nss_turn_off())?
     }
 }
 
@@ -125,15 +119,11 @@ where
         let mut data = [0];
 
         self.nss_turn_on()?;
-        self.delay.delay_us(1);
         self.spi
             .write(&[register.addr() | 0x80])
             .and_then(|_| self.spi.transfer(&mut data))
             .map_err(Error::Bus)
-            .map(|_| {
-                self.delay.delay_us(1);
-                self.nss_turn_off()
-            })??;
+            .map(|_| self.nss_turn_off())??;
         Ok(data[0])
     }
 }
