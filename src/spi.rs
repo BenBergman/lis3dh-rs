@@ -1,5 +1,4 @@
 use core::fmt::Debug;
-use embedded_hal::blocking::delay::DelayUs;
 use embedded_hal::blocking::spi::{Transfer, Write};
 use embedded_hal::digital::v2::OutputPin;
 
@@ -11,35 +10,31 @@ use accelerometer::{Accelerometer, RawAccelerometer};
 use crate::{register::*, Configuration, Error, Lis3dhImpl};
 
 /// `LIS3DH` driver.
-pub struct Lis3dh<SPI, NSS, DELAY> {
+pub struct Lis3dh<SPI, NSS> {
     /// Underlying SPI device
     spi: SPI,
     /// Active-low slave-select pin
     nss: NSS,
-    /// Blocking delay
-    delay: DELAY,
 }
 
-impl<SPI, NSS, DELAY, ESPI, ENSS> Lis3dh<SPI, NSS, DELAY>
+impl<SPI, NSS, ESPI, ENSS> Lis3dh<SPI, NSS>
 where
     SPI: Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
     NSS: OutputPin<Error = ENSS>,
-    DELAY: DelayUs<u8>,
     ESPI: Debug,
     ENSS: Debug,
 {
     /// Create a new LIS3DH driver from the given SPI peripheral.
-    pub fn new(spi: SPI, nss: NSS, delay: DELAY) -> Result<Self, Error<ESPI, ENSS>> {
-        Self::with_config(spi, nss, delay, Default::default())
+    pub fn new(spi: SPI, nss: NSS) -> Result<Self, Error<ESPI, ENSS>> {
+        Self::with_config(spi, nss, Default::default())
     }
 
     pub fn with_config(
         spi: SPI,
         nss: NSS,
-        delay: DELAY,
         config: Configuration,
     ) -> Result<Self, Error<ESPI, ENSS>> {
-        let mut lis3dh = Lis3dh { spi, nss, delay };
+        let mut lis3dh = Lis3dh { spi, nss };
 
         lis3dh.initialize_with_config(config)?;
 
@@ -88,11 +83,10 @@ where
     }
 }
 
-impl<SPI, NSS, DELAY, ESPI, ENSS> crate::Lis3dhImpl for Lis3dh<SPI, NSS, DELAY>
+impl<SPI, NSS, ESPI, ENSS> crate::Lis3dhImpl for Lis3dh<SPI, NSS>
 where
     SPI: Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
     NSS: OutputPin<Error = ENSS>,
-    DELAY: DelayUs<u8>,
     ESPI: Debug,
     ENSS: Debug,
 {
@@ -128,11 +122,10 @@ where
     }
 }
 
-impl<SPI, NSS, DELAY, ESPI, ENSS> RawAccelerometer<I16x3> for Lis3dh<SPI, NSS, DELAY>
+impl<SPI, NSS, ESPI, ENSS> RawAccelerometer<I16x3> for Lis3dh<SPI, NSS>
 where
     SPI: Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
     NSS: OutputPin<Error = ENSS>,
-    DELAY: DelayUs<u8>,
     ESPI: Debug,
     ENSS: Debug,
 {
@@ -146,11 +139,10 @@ where
     }
 }
 
-impl<SPI, NSS, DELAY, ESPI, ENSS> Accelerometer for Lis3dh<SPI, NSS, DELAY>
+impl<SPI, NSS, ESPI, ENSS> Accelerometer for Lis3dh<SPI, NSS>
 where
     SPI: Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
     NSS: OutputPin<Error = ENSS>,
-    DELAY: DelayUs<u8>,
     ESPI: Debug,
     ENSS: Debug,
 {
