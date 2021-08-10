@@ -319,6 +319,77 @@ pub trait Lis3dhImpl {
             self.register_clear_bits(reg, bits)
         }
     }
+
+    /// Get raw acceleration data from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`.
+    #[allow(clippy::type_complexity)]
+    fn acceleration_raw(
+        &mut self,
+    ) -> Result<(i16, i16, i16), Error<Self::BusError, Self::PinError>> {
+        use core::convert::TryInto;
+
+        let accel_bytes = self.read_accel_bytes()?;
+
+        let x = i16::from_le_bytes(accel_bytes[0..2].try_into().unwrap());
+        let y = i16::from_le_bytes(accel_bytes[2..4].try_into().unwrap());
+        let z = i16::from_le_bytes(accel_bytes[4..6].try_into().unwrap());
+
+        Ok((x, y, z))
+    }
+
+    /// Get normalized ±g reading from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`.
+    #[allow(clippy::type_complexity)]
+    fn normalize_acceleration(
+        &mut self,
+    ) -> Result<(f32, f32, f32), Error<Self::BusError, Self::PinError>> {
+        // The official driver from ST was used as a reference.
+        // https://github.com/STMicroelectronics/STMems_Standard_C_drivers/tree/master/lis3dh_STdC
+        let mode = self.get_mode()?;
+        let range = self.get_range()?;
+
+        // See "2.1 Mechanical characteristics" in the datasheet to find the
+        // values below. Scale values have all been divided by 1000 in order
+        // to convert the resulting values from mG to G, while avoiding doing
+        // any actual division on the hardware.
+        let scale = match (mode, range) {
+            // High Resolution mode
+            (Mode::HighResolution, Range::G2) => 0.001,
+            (Mode::HighResolution, Range::G4) => 0.002,
+            (Mode::HighResolution, Range::G8) => 0.004,
+            (Mode::HighResolution, Range::G16) => 0.012,
+            // Normal mode
+            (Mode::Normal, Range::G2) => 0.004,
+            (Mode::Normal, Range::G4) => 0.008,
+            (Mode::Normal, Range::G8) => 0.016,
+            (Mode::Normal, Range::G16) => 0.048,
+            // Low Power mode
+            (Mode::LowPower, Range::G2) => 0.016,
+            (Mode::LowPower, Range::G4) => 0.032,
+            (Mode::LowPower, Range::G8) => 0.064,
+            (Mode::LowPower, Range::G16) => 0.192,
+        };
+
+        // Depending on which Mode we are operating in, the data has different
+        // resolution. Using this knowledge, we determine how many bits the
+        // data needs to be shifted. This is necessary because the raw data
+        // is in left-justified two's complement and we would like for it to be
+        // right-justified instead.
+        let shift: u8 = match mode {
+            Mode::HighResolution => 4, // High Resolution:  12-bit
+            Mode::Normal => 6,         // Normal:           10-bit
+            Mode::LowPower => 8,       // Low Power:         8-bit
+        };
+
+        let (raw_x, raw_y, raw_z) = self.acceleration_raw()?;
+        let x = (raw_x >> shift) as f32 * scale;
+        let y = (raw_y >> shift) as f32 * scale;
+        let z = (raw_z >> shift) as f32 * scale;
+
+        Ok((x, y, z))
+    }
 }
 
 pub struct Configuration {
