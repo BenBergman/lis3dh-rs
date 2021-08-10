@@ -9,7 +9,7 @@ use accelerometer::{Accelerometer, RawAccelerometer};
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
 use crate::register::*;
-use crate::{Error, Lis3dhImpl};
+use crate::{Configuration, Error, Lis3dhImpl};
 
 /// `LIS3DH` driver.
 pub struct Lis3dh<I2C> {
@@ -28,26 +28,20 @@ where
     /// Create a new LIS3DH driver from the given I2C peripheral. Default is
     /// Hz_400 HighResolution.
     pub fn new(i2c: I2C, address: SlaveAddr) -> Result<Self, Error<E, core::convert::Infallible>> {
+        Self::with_config(i2c, address, Default::default())
+    }
+
+    pub fn with_config(
+        i2c: I2C,
+        address: SlaveAddr,
+        config: Configuration,
+    ) -> Result<Self, Error<E, core::convert::Infallible>> {
         let mut lis3dh = Lis3dh {
             i2c,
             address: address.addr(),
         };
 
-        if lis3dh.get_device_id()? != DEVICE_ID {
-            return Err(Error::WrongAddress);
-        }
-
-        // Block data update
-        lis3dh.write_register(Register::CTRL4, BDU)?;
-
-        lis3dh.set_mode(Mode::HighResolution)?;
-
-        lis3dh.set_datarate(DataRate::Hz_400)?;
-
-        lis3dh.enable_axis((true, true, true))?;
-
-        // Enable ADCs.
-        lis3dh.write_register(Register::TEMP_CFG, ADC_EN)?;
+        lis3dh.initialize_with_config(config)?;
 
         Ok(lis3dh)
     }
