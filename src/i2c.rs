@@ -7,6 +7,7 @@ use accelerometer::{Accelerometer, RawAccelerometer};
 
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
+pub use crate::register::SlaveAddr;
 use crate::register::*;
 use crate::{Configuration, Error, Lis3dhImpl};
 
