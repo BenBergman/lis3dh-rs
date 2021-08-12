@@ -1,3 +1,4 @@
+use core::convert::TryInto;
 use core::fmt::Debug;
 
 pub use accelerometer;
@@ -100,9 +101,52 @@ where
 {
     type Error = Error<E, core::convert::Infallible>;
 
-    /// Get normalized ±g reading from the accelerometer.
+    /// Get normalized ±g reading from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`.
     fn accel_norm(&mut self) -> Result<F32x3, AccelerometerError<Self::Error>> {
-        let (x, y, z) = self.normalize_acceleration()?;
+        // The official driver from ST was used as a reference.
+        // https://github.com/STMicroelectronics/STMems_Standard_C_drivers/tree/master/lis3dh_STdC
+        let mode = self.get_mode()?;
+        let range = self.get_range()?;
+
+        // See "2.1 Mechanical characteristics" in the datasheet to find the
+        // values below. Scale values have all been divided by 1000 in order
+        // to convert the resulting values from mG to G, while avoiding doing
+        // any actual division on the hardware.
+        let scale = match (mode, range) {
+            // High Resolution mode
+            (Mode::HighResolution, Range::G2) => 0.001,
+            (Mode::HighResolution, Range::G4) => 0.002,
+            (Mode::HighResolution, Range::G8) => 0.004,
+            (Mode::HighResolution, Range::G16) => 0.012,
+            // Normal mode
+            (Mode::Normal, Range::G2) => 0.004,
+            (Mode::Normal, Range::G4) => 0.008,
+            (Mode::Normal, Range::G8) => 0.016,
+            (Mode::Normal, Range::G16) => 0.048,
+            // Low Power mode
+            (Mode::LowPower, Range::G2) => 0.016,
+            (Mode::LowPower, Range::G4) => 0.032,
+            (Mode::LowPower, Range::G8) => 0.064,
+            (Mode::LowPower, Range::G16) => 0.192,
+        };
+
+        // Depending on which Mode we are operating in, the data has different
+        // resolution. Using this knowledge, we determine how many bits the
+        // data needs to be shifted. This is necessary because the raw data
+        // is in left-justified two's complement and we would like for it to be
+        // right-justified instead.
+        let shift: u8 = match mode {
+            Mode::HighResolution => 4, // High Resolution:  12-bit
+            Mode::Normal => 6,         // Normal:           10-bit
+            Mode::LowPower => 8,       // Low Power:         8-bit
+        };
+
+        let acc_raw = self.accel_raw()?;
+        let x = (acc_raw.x >> shift) as f32 * scale;
+        let y = (acc_raw.y >> shift) as f32 * scale;
+        let z = (acc_raw.z >> shift) as f32 * scale;
 
         Ok(F32x3::new(x, y, z))
     }
@@ -120,9 +164,15 @@ where
 {
     type Error = Error<E, core::convert::Infallible>;
 
-    /// Get raw acceleration data from the accelerometer.
+    /// Get raw acceleration data from the accelerometer. You should be reading
+    /// based on data ready interrupt or if reading in a tight loop you should
+    /// waiting for `is_data_ready`.
     fn accel_raw(&mut self) -> Result<I16x3, AccelerometerError<Self::Error>> {
-        let (x, y, z) = self.acceleration_raw()?;
+        let accel_bytes = self.read_accel_bytes()?;
+
+        let x = i16::from_le_bytes(accel_bytes[0..2].try_into().unwrap());
+        let y = i16::from_le_bytes(accel_bytes[2..4].try_into().unwrap());
+        let z = i16::from_le_bytes(accel_bytes[4..6].try_into().unwrap());
 
         Ok(I16x3::new(x, y, z))
     }
