@@ -62,6 +62,27 @@ where
 {
     /// Create a new LIS3DH driver from the given I2C peripheral.
     /// Default is Hz_400 HighResolution.
+    /// An example using the [nrf52840_hal](https://docs.rs/nrf52840-hal/latest/nrf52840_hal/index.html):
+    ///
+    ///     use nrf52840_hal::gpio::{Level, PushPull};
+    ///     use lis3dh::Lis3dh;
+    ///     
+    ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
+    ///     let pins = p0::Parts::new(peripherals.P0);
+    ///     
+    ///     let twim0_scl = pins.p0_31.into_floating_input().degrade();
+    ///     let twim0_sda = pins.p0_30.into_floating_input().degrade();
+    ///     
+    ///     let i2c = nrf52840_hal::twim::Twim::new(
+    ///         peripherals.TWIM0,
+    ///         nrf52840_hal::twim::Pins {
+    ///             scl: twim0_scl,
+    ///             sda: twim0_sda,
+    ///         },
+    ///         nrf52840_hal::twim::Frequency::K400,
+    ///     );
+    ///     
+    ///     let lis3dh = Lis3dh::new_i2c(i2c, lis3dh::SlaveAddr::Default).unwrap();
     pub fn new_i2c(
         i2c: I2C,
         address: SlaveAddr,
@@ -85,6 +106,36 @@ where
     NSS: OutputPin<Error = ENSS>,
 {
     /// Create a new LIS3DH driver from the given SPI peripheral.
+    /// An example using the [nrf52840_hal](https://docs.rs/nrf52840-hal/latest/nrf52840_hal/index.html):
+    ///
+    ///     use nrf52840_hal::gpio::{p0::{Parts, P0_28}, *};
+    ///     use nrf52840_hal::spim::Spim;
+    ///     use lis3dh::Lis3dh;
+    ///     
+    ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
+    ///     let port0 = Parts::new(peripherals.P0);
+    ///     
+    ///     // define the chip select pin
+    ///     let cs: P0_28<Output<PushPull>> = port0.p0_28.into_push_pull_output(Level::High);
+    ///     
+    ///     // spi pins: clock, miso, mosi
+    ///     let pins = nrf52840_hal::spim::Pins {
+    ///         sck: port0.p0_31.into_push_pull_output(Level::Low).degrade(),
+    ///         miso: Some(port0.p0_30.into_push_pull_output(Level::Low).degrade()),
+    ///         mosi: Some(port0.p0_29.into_floating_input().degrade()),
+    ///     };
+    ///     
+    ///     // set up the spi peripheral
+    ///     let spi = Spim::new(
+    ///         peripherals.SPIM2,
+    ///         pins,
+    ///         nrf52840_hal::spim::Frequency::K500,
+    ///         nrf52840_hal::spim::MODE_0,
+    ///         0,
+    ///     );
+    ///
+    ///     // create and initialize the sensor
+    ///     let lis3dh = Lis3dh::new_spi(spi, cs).unwrap();
     pub fn new_spi(spi: SPI, nss: NSS) -> Result<Self, Error<ESPI, ENSS>> {
         let core = Lis3dhSPI { spi, nss };
 
@@ -481,7 +532,8 @@ where
     }
 }
 
-struct Lis3dhI2C<I2C> {
+/// Marker to indicate I2C is used to communicate with the Lis3dh
+pub struct Lis3dhI2C<I2C> {
     /// Underlying I²C device
     i2c: I2C,
 
@@ -535,7 +587,8 @@ where
     }
 }
 
-struct Lis3dhSPI<SPI, NSS> {
+/// Marker to indicate SPI is used to communicate with the Lis3dh
+pub struct Lis3dhSPI<SPI, NSS> {
     /// Underlying SPI device
     spi: SPI,
 
@@ -584,8 +637,8 @@ where
         self.spi
             .write(&[start_register.addr() | 0xC0])
             .and_then(|_| self.spi.transfer(buf))
-            .map_err(Error::Bus)
-            .map(|_| self.nss_turn_off())?
+            .map_err(Error::Bus)?;
+        self.nss_turn_off()
     }
 }
 
@@ -620,8 +673,8 @@ where
         self.spi
             .write(&[register.addr() | 0x80])
             .and_then(|_| self.spi.transfer(&mut data))
-            .map_err(Error::Bus)
-            .map(|_| self.nss_turn_off())??;
+            .map_err(Error::Bus)?;
+        self.nss_turn_off()?;
         Ok(data[0])
     }
 }
