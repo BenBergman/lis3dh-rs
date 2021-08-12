@@ -20,7 +20,6 @@ use register::*;
 pub use register::{DataRate, DataStatus, Mode, Range, SlaveAddr};
 
 pub mod i2c;
-pub mod spi;
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
@@ -338,7 +337,7 @@ impl Default for Configuration {
         Self {
             enable_temperature: false,
             block_data_update: true,
-            mode: Mode::HighResolution, // Question: should this be normal?
+            mode: Mode::Normal,
             datarate: DataRate::Hz_400,
             enable_x_axis: true,
             enable_y_axis: true,
