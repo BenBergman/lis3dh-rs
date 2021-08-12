@@ -13,12 +13,12 @@ pub enum SlaveAddr {
 
 impl SlaveAddr {
     pub fn addr(self) -> u8 {
-        return self as u8;
+        self as u8
     }
 }
 
 /// Enumerate all device registers.
-#[allow(dead_code, non_camel_case_types)]
+#[allow(dead_code, non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Register {
@@ -74,28 +74,28 @@ impl Register {
 
     /// Is the register read-only?
     pub fn read_only(self) -> bool {
-        match self {
+        matches!(
+            self,
             Register::STATUS_AUX
-            | Register::OUT_ADC1_L
-            | Register::OUT_ADC1_H
-            | Register::OUT_ADC2_L
-            | Register::OUT_ADC2_H
-            | Register::OUT_ADC3_L
-            | Register::OUT_ADC3_H
-            | Register::WHOAMI
-            | Register::STATUS
-            | Register::OUT_X_L
-            | Register::OUT_X_H
-            | Register::OUT_Y_L
-            | Register::OUT_Y_H
-            | Register::OUT_Z_L
-            | Register::OUT_Z_H
-            | Register::FIFO_SRC
-            | Register::INT1_SRC
-            | Register::INT2_SRC
-            | Register::CLICK_SRC => true,
-            _ => false,
-        }
+                | Register::OUT_ADC1_L
+                | Register::OUT_ADC1_H
+                | Register::OUT_ADC2_L
+                | Register::OUT_ADC2_H
+                | Register::OUT_ADC3_L
+                | Register::OUT_ADC3_H
+                | Register::WHOAMI
+                | Register::STATUS
+                | Register::OUT_X_L
+                | Register::OUT_X_H
+                | Register::OUT_Y_L
+                | Register::OUT_Y_H
+                | Register::OUT_Z_L
+                | Register::OUT_Z_H
+                | Register::FIFO_SRC
+                | Register::INT1_SRC
+                | Register::INT2_SRC
+                | Register::CLICK_SRC
+        )
     }
 }
 
