@@ -17,7 +17,7 @@ pub use accelerometer;
 
 mod register;
 use register::*;
-pub use register::{DataRate, DataStatus, Mode, Range};
+pub use register::{DataRate, DataStatus, Mode, Range, SlaveAddr};
 
 pub mod i2c;
 pub mod spi;
