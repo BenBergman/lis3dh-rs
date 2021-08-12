@@ -678,3 +678,42 @@ where
         Ok(data[0])
     }
 }
+
+/// Sensor configuration options
+pub struct Configuration {
+    /// The operating mode, default [`Mode::HighResolution`].
+    pub mode: Mode,
+    /// The output data rate, default [`DataRate::Hz_400`].
+    pub datarate: DataRate,
+    /// Measure changes in the x axis, default `true`.
+    pub enable_x_axis: bool,
+    /// Measure changes in the y axis, default `true`.
+    pub enable_y_axis: bool,
+    /// Measure changes in the z axis, default `true`.
+    pub enable_z_axis: bool,
+    /// When is data updated
+    ///
+    /// - when `true`: only after data is read
+    /// - when `false`: continually
+    ///
+    /// default `true`
+    pub block_data_update: bool,
+    /// Enable temperature measurements. When set, it implies `block_data_update = true`.
+    ///
+    /// default: `false`
+    pub enable_temperature: bool,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            enable_temperature: false,
+            block_data_update: true,
+            mode: Mode::HighResolution, // Question: should this be normal?
+            datarate: DataRate::Hz_400,
+            enable_x_axis: true,
+            enable_y_axis: true,
+            enable_z_axis: true,
+        }
+    }
+}
