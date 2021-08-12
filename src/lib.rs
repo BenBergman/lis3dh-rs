@@ -19,7 +19,8 @@ mod register;
 use register::*;
 pub use register::{DataRate, DataStatus, Mode, Range, SlaveAddr};
 
-pub mod i2c;
+mod i2c;
+pub use i2c::Lis3dh;
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
@@ -63,34 +64,6 @@ pub trait Lis3dhImpl {
     ) -> Result<u8, Error<Self::BusError, Self::PinError>>;
 
     fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<Self::BusError, Self::PinError>>;
-
-    /// Initalize the device given the configuration
-    fn initialize_with_config(
-        &mut self,
-        conf: Configuration,
-    ) -> Result<(), Error<Self::BusError, Self::PinError>> {
-        if self.get_device_id()? != DEVICE_ID {
-            return Err(Error::WrongAddress);
-        }
-
-        if conf.block_data_update || conf.enable_temperature {
-            // Block data update
-            self.write_register(Register::CTRL4, BDU)?;
-        }
-
-        self.set_mode(conf.mode)?;
-
-        self.set_datarate(conf.datarate)?;
-
-        self.enable_axis((conf.enable_x_axis, conf.enable_y_axis, conf.enable_z_axis))?;
-
-        if conf.enable_temperature {
-            self.enable_temp(true)?;
-        }
-
-        // Enable ADCs.
-        self.write_register(Register::TEMP_CFG, ADC_EN)
-    }
 
     /// `WHO_AM_I` register.
     fn get_device_id(&mut self) -> Result<u8, Error<Self::BusError, Self::PinError>> {
@@ -316,32 +289,6 @@ pub trait Lis3dhImpl {
             self.register_set_bits(reg, bits)
         } else {
             self.register_clear_bits(reg, bits)
-        }
-    }
-}
-
-pub struct Configuration {
-    /// When set, overrides block_data_update
-    pub enable_temperature: bool,
-    /// Whether data should only be updated after reading
-    pub block_data_update: bool,
-    pub mode: Mode,
-    pub datarate: DataRate,
-    pub enable_x_axis: bool,
-    pub enable_y_axis: bool,
-    pub enable_z_axis: bool,
-}
-
-impl Default for Configuration {
-    fn default() -> Self {
-        Self {
-            enable_temperature: false,
-            block_data_update: true,
-            mode: Mode::Normal,
-            datarate: DataRate::Hz_400,
-            enable_x_axis: true,
-            enable_y_axis: true,
-            enable_z_axis: true,
         }
     }
 }
