@@ -60,8 +60,8 @@ impl<I2C, E> Lis3dh<Lis3dhI2C<I2C>>
 where
     I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
 {
-    /// Create a new LIS3DH driver from the given I2C peripheral. Default is
-    /// Hz_400 HighResolution.
+    /// Create a new LIS3DH driver from the given I2C peripheral.
+    /// Default is Hz_400 HighResolution.
     pub fn new_i2c(
         i2c: I2C,
         address: SlaveAddr,
@@ -70,6 +70,23 @@ where
             i2c,
             address: address.addr(),
         };
+
+        let mut lis3dh = Lis3dh { core };
+
+        lis3dh.initialize()?;
+
+        Ok(lis3dh)
+    }
+}
+
+impl<SPI, NSS, ESPI, ENSS> Lis3dh<Lis3dhSPI<SPI, NSS>>
+where
+    SPI: spi::Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
+    NSS: OutputPin<Error = ENSS>,
+{
+    /// Create a new LIS3DH driver from the given SPI peripheral.
+    pub fn new_spi(spi: SPI, nss: NSS) -> Result<Self, Error<ESPI, ENSS>> {
+        let core = Lis3dhSPI { spi, nss };
 
         let mut lis3dh = Lis3dh { core };
 
