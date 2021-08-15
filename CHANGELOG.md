@@ -1,3 +1,7 @@
+# 0.4.1
+* Spi support
+* BREAKING - new method has been replaced by new_i2c or new_spi.
+
 # 0.3.0
 
 * BREAKING - `accel_norm` calculations for certain modes were incorrectly applied during 0.2.0 and have been fixed.
