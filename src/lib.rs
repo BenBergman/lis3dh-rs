@@ -17,7 +17,11 @@ pub use accelerometer;
 use accelerometer::error::Error as AccelerometerError;
 use accelerometer::vector::{F32x3, I16x3};
 use accelerometer::{Accelerometer, RawAccelerometer};
-use embedded_hal::blocking::i2c::{Write, WriteRead};
+
+use embedded_hal::blocking::i2c::{self, WriteRead};
+use embedded_hal::blocking::spi::{self, Transfer};
+
+use embedded_hal::digital::v2::OutputPin;
 
 mod register;
 use register::*;
@@ -26,9 +30,10 @@ pub use register::{DataRate, DataStatus, Mode, Range, SlaveAddr};
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
 #[derive(Debug)]
-pub enum Error<E> {
+pub enum Error<BusError, PinError> {
     /// I²C bus error
-    I2C(E),
+    Bus(BusError),
+    Pin(PinError),
 
     /// Invalid data rate selection
     InvalidDataRate,
@@ -47,54 +52,135 @@ pub enum Error<E> {
 }
 
 /// `LIS3DH` driver.
-pub struct Lis3dh<I2C> {
-    /// Underlying I²C device
-    i2c: I2C,
-
-    /// Current I²C slave address
-    address: u8,
+pub struct Lis3dh<CORE> {
+    core: CORE,
 }
 
-impl<I2C, E> Lis3dh<I2C>
+impl<I2C, E> Lis3dh<Lis3dhI2C<I2C>>
 where
-    I2C: WriteRead<Error = E> + Write<Error = E>,
-    E: Debug,
+    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
 {
-    /// Create a new LIS3DH driver from the given I2C peripheral. Default is
-    /// Hz_400 HighResolution.
-    pub fn new(i2c: I2C, address: SlaveAddr) -> Result<Self, Error<E>> {
-        let mut lis3dh = Lis3dh {
+    /// Create a new LIS3DH driver from the given I2C peripheral.
+    /// Default is Hz_400 HighResolution.
+    /// An example using the [nrf52840_hal](https://docs.rs/nrf52840-hal/latest/nrf52840_hal/index.html):
+    ///
+    ///     use nrf52840_hal::gpio::{Level, PushPull};
+    ///     use lis3dh::Lis3dh;
+    ///     
+    ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
+    ///     let pins = p0::Parts::new(peripherals.P0);
+    ///     
+    ///     let twim0_scl = pins.p0_31.into_floating_input().degrade();
+    ///     let twim0_sda = pins.p0_30.into_floating_input().degrade();
+    ///     
+    ///     let i2c = nrf52840_hal::twim::Twim::new(
+    ///         peripherals.TWIM0,
+    ///         nrf52840_hal::twim::Pins {
+    ///             scl: twim0_scl,
+    ///             sda: twim0_sda,
+    ///         },
+    ///         nrf52840_hal::twim::Frequency::K400,
+    ///     );
+    ///     
+    ///     let lis3dh = Lis3dh::new_i2c(i2c, lis3dh::SlaveAddr::Default).unwrap();
+    pub fn new_i2c(
+        i2c: I2C,
+        address: SlaveAddr,
+    ) -> Result<Self, Error<E, core::convert::Infallible>> {
+        let core = Lis3dhI2C {
             i2c,
             address: address.addr(),
         };
 
-        if lis3dh.get_device_id()? != DEVICE_ID {
+        let mut lis3dh = Lis3dh { core };
+
+        lis3dh.initialize()?;
+
+        Ok(lis3dh)
+    }
+}
+
+impl<SPI, NSS, ESPI, ENSS> Lis3dh<Lis3dhSPI<SPI, NSS>>
+where
+    SPI: spi::Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
+    NSS: OutputPin<Error = ENSS>,
+{
+    /// Create a new LIS3DH driver from the given SPI peripheral.
+    /// An example using the [nrf52840_hal](https://docs.rs/nrf52840-hal/latest/nrf52840_hal/index.html):
+    ///
+    ///     use nrf52840_hal::gpio::{p0::{Parts, P0_28}, *};
+    ///     use nrf52840_hal::spim::Spim;
+    ///     use lis3dh::Lis3dh;
+    ///     
+    ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
+    ///     let port0 = Parts::new(peripherals.P0);
+    ///     
+    ///     // define the chip select pin
+    ///     let cs: P0_28<Output<PushPull>> = port0.p0_28.into_push_pull_output(Level::High);
+    ///     
+    ///     // spi pins: clock, miso, mosi
+    ///     let pins = nrf52840_hal::spim::Pins {
+    ///         sck: port0.p0_31.into_push_pull_output(Level::Low).degrade(),
+    ///         miso: Some(port0.p0_30.into_push_pull_output(Level::Low).degrade()),
+    ///         mosi: Some(port0.p0_29.into_floating_input().degrade()),
+    ///     };
+    ///     
+    ///     // set up the spi peripheral
+    ///     let spi = Spim::new(
+    ///         peripherals.SPIM2,
+    ///         pins,
+    ///         nrf52840_hal::spim::Frequency::K500,
+    ///         nrf52840_hal::spim::MODE_0,
+    ///         0,
+    ///     );
+    ///
+    ///     // create and initialize the sensor
+    ///     let lis3dh = Lis3dh::new_spi(spi, cs).unwrap();
+    pub fn new_spi(spi: SPI, nss: NSS) -> Result<Self, Error<ESPI, ENSS>> {
+        let core = Lis3dhSPI { spi, nss };
+
+        let mut lis3dh = Lis3dh { core };
+
+        lis3dh.initialize()?;
+
+        Ok(lis3dh)
+    }
+}
+
+impl<CORE> Lis3dh<CORE>
+where
+    CORE: Lis3dhCore,
+{
+    fn initialize(&mut self) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        if self.get_device_id()? != DEVICE_ID {
             return Err(Error::WrongAddress);
         }
 
         // Block data update
-        lis3dh.write_register(Register::CTRL4, BDU)?;
+        self.write_register(Register::CTRL4, BDU)?;
 
-        lis3dh.set_mode(Mode::HighResolution)?;
+        self.set_mode(Mode::HighResolution)?;
 
-        lis3dh.set_datarate(DataRate::Hz_400)?;
+        self.set_datarate(DataRate::Hz_400)?;
 
-        lis3dh.enable_axis((true, true, true))?;
+        self.enable_axis((true, true, true))?;
 
         // Enable ADCs.
-        lis3dh.write_register(Register::TEMP_CFG, ADC_EN)?;
+        self.write_register(Register::TEMP_CFG, ADC_EN)?;
 
-        Ok(lis3dh)
+        Ok(())
     }
-
     /// `WHO_AM_I` register.
-    pub fn get_device_id(&mut self) -> Result<u8, Error<E>> {
+    pub fn get_device_id(&mut self) -> Result<u8, Error<CORE::BusError, CORE::PinError>> {
         self.read_register(Register::WHOAMI)
     }
 
     /// X,Y,Z-axis enable.
     /// `CTRL_REG1`: `Xen`, `Yen`, `Zen`
-    fn enable_axis(&mut self, (x, y, z): (bool, bool, bool)) -> Result<(), Error<E>> {
+    fn enable_axis(
+        &mut self,
+        (x, y, z): (bool, bool, bool),
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.modify_register(Register::CTRL1, |mut ctrl1| {
             ctrl1 &= !(X_EN | Y_EN | Z_EN); // disable all axes
 
@@ -106,8 +192,8 @@ where
         })
     }
 
-    /// Operating mode selection.  
-    /// `CTRL_REG1`: `LPen` bit, `CTRL_REG4`: `HR` bit.  
+    /// Operating mode selection.
+    /// `CTRL_REG1`: `LPen` bit, `CTRL_REG4`: `HR` bit.
     /// You need to wait for stabilization after setting. In future this
     /// function will be deprecated and instead take a `Delay` to do this for
     /// you.
@@ -120,7 +206,7 @@ where
     /// | Normal         | HighResolution | 7/datarate |
     /// | LowPower       | Normal         | 1/datarate |
     /// | LowPower       | HighResolution | 7/datarate |
-    pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E>> {
+    pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         match mode {
             Mode::LowPower => {
                 self.register_set_bits(Register::CTRL1, LP_EN)?;
@@ -140,7 +226,7 @@ where
     }
 
     /// Read the current operating mode.
-    pub fn get_mode(&mut self) -> Result<Mode, Error<E>> {
+    pub fn get_mode(&mut self) -> Result<Mode, Error<CORE::BusError, CORE::PinError>> {
         let ctrl1 = self.read_register(Register::CTRL1)?;
         let ctrl4 = self.read_register(Register::CTRL4)?;
 
@@ -158,7 +244,10 @@ where
     }
 
     /// Data rate selection.
-    pub fn set_datarate(&mut self, datarate: DataRate) -> Result<(), Error<E>> {
+    pub fn set_datarate(
+        &mut self,
+        datarate: DataRate,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.modify_register(Register::CTRL1, |mut ctrl1| {
             // Mask off lowest 4 bits
             ctrl1 &= !ODR_MASK;
@@ -170,7 +259,7 @@ where
     }
 
     /// Read the current data selection rate.
-    pub fn get_datarate(&mut self) -> Result<DataRate, Error<E>> {
+    pub fn get_datarate(&mut self) -> Result<DataRate, Error<CORE::BusError, CORE::PinError>> {
         let ctrl1 = self.read_register(Register::CTRL1)?;
         let odr = (ctrl1 >> 4) & 0x0F;
 
@@ -178,7 +267,7 @@ where
     }
 
     /// Full-scale selection.
-    pub fn set_range(&mut self, range: Range) -> Result<(), Error<E>> {
+    pub fn set_range(&mut self, range: Range) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.modify_register(Register::CTRL4, |mut ctrl4| {
             // Mask off lowest 4 bits
             ctrl4 &= !FS_MASK;
@@ -190,7 +279,7 @@ where
     }
 
     /// Read the current full-scale.
-    pub fn get_range(&mut self) -> Result<Range, Error<E>> {
+    pub fn get_range(&mut self) -> Result<Range, Error<CORE::BusError, CORE::PinError>> {
         let ctrl4 = self.read_register(Register::CTRL4)?;
         let fs = (ctrl4 >> 4) & 0x03;
 
@@ -198,17 +287,17 @@ where
     }
 
     /// Set `REFERENCE` register.
-    pub fn set_ref(&mut self, reference: u8) -> Result<(), Error<E>> {
+    pub fn set_ref(&mut self, reference: u8) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.write_register(Register::REFERENCE, reference)
     }
 
     /// Read the `REFERENCE` register.
-    pub fn get_ref(&mut self) -> Result<u8, Error<E>> {
+    pub fn get_ref(&mut self) -> Result<u8, Error<CORE::BusError, CORE::PinError>> {
         self.read_register(Register::REFERENCE)
     }
 
     /// Accelerometer data-available status.
-    pub fn get_status(&mut self) -> Result<DataStatus, Error<E>> {
+    pub fn get_status(&mut self) -> Result<DataStatus, Error<CORE::BusError, CORE::PinError>> {
         let stat = self.read_register(Register::STATUS)?;
 
         Ok(DataStatus {
@@ -222,7 +311,7 @@ where
     /// Convenience function for `STATUS_REG` to confirm all three X, Y and
     /// Z-axis have new data available for reading by accel_raw and associated
     /// function calls.
-    pub fn is_data_ready(&mut self) -> Result<bool, Error<E>> {
+    pub fn is_data_ready(&mut self) -> Result<bool, Error<CORE::BusError, CORE::PinError>> {
         let value = self.get_status()?;
 
         Ok(value.zyxda)
@@ -230,7 +319,10 @@ where
 
     /// Temperature sensor enable.
     /// `TEMP_CGF_REG`: `TEMP_EN`, the BDU bit in `CTRL_REG4` is also set.
-    pub fn enable_temp(&mut self, enable: bool) -> Result<(), Error<E>> {
+    pub fn enable_temp(
+        &mut self,
+        enable: bool,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.register_xset_bits(Register::TEMP_CFG, ADC_EN & TEMP_EN, enable)?;
 
         // enable block data update (required for temp reading)
@@ -243,7 +335,7 @@ where
 
     /// Raw temperature sensor data as `i16`. The temperature sensor __must__
     /// be enabled via `enable_temp` prior to reading.
-    pub fn get_temp_out(&mut self) -> Result<i16, Error<E>> {
+    pub fn get_temp_out(&mut self) -> Result<i16, Error<CORE::BusError, CORE::PinError>> {
         let out_l = self.read_register(Register::OUT_ADC3_L)?;
         let out_h = self.read_register(Register::OUT_ADC3_H)?;
 
@@ -253,7 +345,7 @@ where
     /// Temperature sensor data converted to `f32`. Output is in degree
     /// celsius. The temperature sensor __must__ be enabled via `enable_temp`
     /// prior to reading.
-    pub fn get_temp_outf(&mut self) -> Result<f32, Error<E>> {
+    pub fn get_temp_outf(&mut self) -> Result<f32, Error<CORE::BusError, CORE::PinError>> {
         let temp_out = self.get_temp_out()?;
 
         Ok(temp_out as f32 / 256.0 + 25.0)
@@ -262,7 +354,11 @@ where
     /// Modify a register's value. Read the current value of the register,
     /// update the value with the provided function, and set the register to
     /// the return value.
-    fn modify_register<F>(&mut self, register: Register, f: F) -> Result<(), Error<E>>
+    fn modify_register<F>(
+        &mut self,
+        register: Register,
+        f: F,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>>
     where
         F: FnOnce(u8) -> u8,
     {
@@ -272,63 +368,46 @@ where
     }
 
     /// Clear the given bits in the given register.
-    fn register_clear_bits(&mut self, reg: Register, bits: u8) -> Result<(), Error<E>> {
+    fn register_clear_bits(
+        &mut self,
+        reg: Register,
+        bits: u8,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.modify_register(reg, |v| v & !bits)
     }
 
     /// Set the given bits in the given register.
-    fn register_set_bits(&mut self, reg: Register, bits: u8) -> Result<(), Error<E>> {
+    fn register_set_bits(
+        &mut self,
+        reg: Register,
+        bits: u8,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.modify_register(reg, |v| v | bits)
     }
 
     /// Set or clear the given given bits in the given register, depending on
     /// the value of `set`.
-    fn register_xset_bits(&mut self, reg: Register, bits: u8, set: bool) -> Result<(), Error<E>> {
+    fn register_xset_bits(
+        &mut self,
+        reg: Register,
+        bits: u8,
+        set: bool,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         if set {
             self.register_set_bits(reg, bits)
         } else {
             self.register_clear_bits(reg, bits)
         }
     }
-
-    /// Read from the registers for each of the 3 axes.
-    fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<E>> {
-        let mut data = [0u8; 6];
-
-        self.i2c
-            .write_read(self.address, &[Register::OUT_X_L.addr() | 0x80], &mut data)
-            .map_err(Error::I2C)
-            .and(Ok(data))
-    }
-
-    /// Write a byte to the given register.
-    fn write_register(&mut self, register: Register, value: u8) -> Result<(), Error<E>> {
-        if register.read_only() {
-            return Err(Error::WriteToReadOnly);
-        }
-
-        self.i2c
-            .write(self.address, &[register.addr(), value])
-            .map_err(Error::I2C)
-    }
-
-    /// Read a byte from the given register.
-    fn read_register(&mut self, register: Register) -> Result<u8, Error<E>> {
-        let mut data = [0];
-
-        self.i2c
-            .write_read(self.address, &[register.addr()], &mut data)
-            .map_err(Error::I2C)
-            .and(Ok(data[0]))
-    }
 }
 
-impl<I2C, E> Accelerometer for Lis3dh<I2C>
+impl<CORE> Accelerometer for Lis3dh<CORE>
 where
-    I2C: WriteRead<Error = E> + Write<Error = E>,
-    E: Debug,
+    CORE: Lis3dhCore,
+    CORE::PinError: Debug,
+    CORE::BusError: Debug,
 {
-    type Error = Error<E>;
+    type Error = Error<CORE::BusError, CORE::PinError>;
 
     /// Get normalized ±g reading from the accelerometer. You should be reading
     /// based on data ready interrupt or if reading in a tight loop you should
@@ -386,12 +465,13 @@ where
     }
 }
 
-impl<I2C, E> RawAccelerometer<I16x3> for Lis3dh<I2C>
+impl<CORE> RawAccelerometer<I16x3> for Lis3dh<CORE>
 where
-    I2C: WriteRead<Error = E> + Write<Error = E>,
-    E: Debug,
+    CORE: Lis3dhCore,
+    CORE::PinError: Debug,
+    CORE::BusError: Debug,
 {
-    type Error = Error<E>;
+    type Error = Error<CORE::BusError, CORE::PinError>;
 
     /// Get raw acceleration data from the accelerometer. You should be reading
     /// based on data ready interrupt or if reading in a tight loop you should
@@ -404,5 +484,236 @@ where
         let z = i16::from_le_bytes(accel_bytes[4..6].try_into().unwrap());
 
         Ok(I16x3::new(x, y, z))
+    }
+}
+
+pub trait Lis3dhCore {
+    type BusError;
+    type PinError;
+
+    fn write_register(
+        &mut self,
+        register: Register,
+        value: u8,
+    ) -> Result<(), Error<Self::BusError, Self::PinError>>;
+
+    fn read_register(
+        &mut self,
+        register: Register,
+    ) -> Result<u8, Error<Self::BusError, Self::PinError>>;
+
+    fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<Self::BusError, Self::PinError>>;
+}
+
+impl<CORE> Lis3dhCore for Lis3dh<CORE>
+where
+    CORE: Lis3dhCore,
+{
+    type BusError = CORE::BusError;
+    type PinError = CORE::PinError;
+
+    fn write_register(
+        &mut self,
+        register: Register,
+        value: u8,
+    ) -> Result<(), Error<Self::BusError, Self::PinError>> {
+        self.core.write_register(register, value)
+    }
+
+    fn read_register(
+        &mut self,
+        register: Register,
+    ) -> Result<u8, Error<Self::BusError, Self::PinError>> {
+        self.core.read_register(register)
+    }
+
+    fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<Self::BusError, Self::PinError>> {
+        self.core.read_accel_bytes()
+    }
+}
+
+/// Marker to indicate I2C is used to communicate with the Lis3dh
+pub struct Lis3dhI2C<I2C> {
+    /// Underlying I²C device
+    i2c: I2C,
+
+    /// Current I²C slave address
+    address: u8,
+}
+
+impl<I2C, E> Lis3dhCore for Lis3dhI2C<I2C>
+where
+    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+{
+    type BusError = E;
+    type PinError = core::convert::Infallible;
+
+    /// Read from the registers for each of the 3 axes.
+    fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<Self::BusError, Self::PinError>> {
+        let mut data = [0u8; 6];
+
+        self.i2c
+            .write_read(self.address, &[Register::OUT_X_L.addr() | 0x80], &mut data)
+            .map_err(Error::Bus)
+            .and(Ok(data))
+    }
+
+    /// Write a byte to the given register.
+    fn write_register(
+        &mut self,
+        register: Register,
+        value: u8,
+    ) -> Result<(), Error<Self::BusError, Self::PinError>> {
+        if register.read_only() {
+            return Err(Error::WriteToReadOnly);
+        }
+
+        self.i2c
+            .write(self.address, &[register.addr(), value])
+            .map_err(Error::Bus)
+    }
+
+    /// Read a byte from the given register.
+    fn read_register(
+        &mut self,
+        register: Register,
+    ) -> Result<u8, Error<Self::BusError, Self::PinError>> {
+        let mut data = [0];
+
+        self.i2c
+            .write_read(self.address, &[register.addr()], &mut data)
+            .map_err(Error::Bus)
+            .and(Ok(data[0]))
+    }
+}
+
+/// Marker to indicate SPI is used to communicate with the Lis3dh
+pub struct Lis3dhSPI<SPI, NSS> {
+    /// Underlying SPI device
+    spi: SPI,
+
+    nss: NSS,
+}
+
+impl<SPI, NSS, ESPI, ENSS> Lis3dhSPI<SPI, NSS>
+where
+    SPI: spi::Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
+    NSS: OutputPin<Error = ENSS>,
+{
+    /// turn on the SPI slave
+    fn nss_turn_on(&mut self) -> Result<(), Error<ESPI, ENSS>> {
+        self.nss.set_low().map_err(Error::Pin)
+    }
+
+    /// turn off the SPI slave
+    fn nss_turn_off(&mut self) -> Result<(), Error<ESPI, ENSS>> {
+        self.nss.set_high().map_err(Error::Pin)
+    }
+
+    /// Writes to many registers. Does not check whether all registers
+    /// can be written to
+    unsafe fn write_multiple_regs(
+        &mut self,
+        start_register: Register,
+        data: &[u8],
+    ) -> Result<(), Error<ESPI, ENSS>> {
+        self.nss_turn_on()?;
+        let res = self
+            .spi
+            .write(&[start_register.addr() | 0x40])
+            .and_then(|_| self.spi.write(data))
+            .map_err(Error::Bus);
+        self.nss_turn_off()?;
+        res
+    }
+
+    /// Read from the registers for each of the 3 axes.
+    fn read_multiple_regs(
+        &mut self,
+        start_register: Register,
+        buf: &mut [u8],
+    ) -> Result<(), Error<ESPI, ENSS>> {
+        self.nss_turn_on()?;
+        self.spi
+            .write(&[start_register.addr() | 0xC0])
+            .and_then(|_| self.spi.transfer(buf))
+            .map_err(Error::Bus)?;
+        self.nss_turn_off()
+    }
+}
+
+impl<SPI, NSS, ESPI, ENSS> Lis3dhCore for Lis3dhSPI<SPI, NSS>
+where
+    SPI: spi::Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
+    NSS: OutputPin<Error = ENSS>,
+{
+    type BusError = ESPI;
+    type PinError = ENSS;
+
+    /// Read from the registers for each of the 3 axes.
+    fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<ESPI, ENSS>> {
+        let mut data = [0u8; 6];
+        self.read_multiple_regs(Register::OUT_X_L, &mut data)?;
+        Ok(data)
+    }
+
+    /// Write a byte to the given register.
+    fn write_register(&mut self, register: Register, value: u8) -> Result<(), Error<ESPI, ENSS>> {
+        if register.read_only() {
+            return Err(Error::WriteToReadOnly);
+        }
+        unsafe { self.write_multiple_regs(register, &[value]) }
+    }
+
+    /// Read a byte from the given register.
+    fn read_register(&mut self, register: Register) -> Result<u8, Error<ESPI, ENSS>> {
+        let mut data = [0];
+
+        self.nss_turn_on()?;
+        self.spi
+            .write(&[register.addr() | 0x80])
+            .and_then(|_| self.spi.transfer(&mut data))
+            .map_err(Error::Bus)?;
+        self.nss_turn_off()?;
+        Ok(data[0])
+    }
+}
+
+/// Sensor configuration options
+pub struct Configuration {
+    /// The operating mode, default [`Mode::HighResolution`].
+    pub mode: Mode,
+    /// The output data rate, default [`DataRate::Hz_400`].
+    pub datarate: DataRate,
+    /// Measure changes in the x axis, default `true`.
+    pub enable_x_axis: bool,
+    /// Measure changes in the y axis, default `true`.
+    pub enable_y_axis: bool,
+    /// Measure changes in the z axis, default `true`.
+    pub enable_z_axis: bool,
+    /// When is data updated
+    ///
+    /// - when `true`: only after data is read
+    /// - when `false`: continually
+    ///
+    /// default `true`
+    pub block_data_update: bool,
+    /// Enable temperature measurements. When set, it implies `block_data_update = true`.
+    ///
+    /// default: `false`
+    pub enable_temperature: bool,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            enable_temperature: false,
+            block_data_update: true,
+            mode: Mode::HighResolution, // Question: should this be normal?
+            datarate: DataRate::Hz_400,
+            enable_x_axis: true,
+            enable_y_axis: true,
+            enable_z_axis: true,
+        }
     }
 }
