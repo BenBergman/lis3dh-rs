@@ -29,7 +29,7 @@ mod register;
 use interrupts::*;
 pub use interrupts::{
     Detect4D, Interrupt1, Interrupt2, InterruptConfig, InterruptMode, InterruptSource, IrqPin,
-    IrqPin1Conf, IrqPin2Conf, LatchInterruptRequest,
+    IrqPin1Config, IrqPin2Config, LatchInterruptRequest,
 };
 
 use register::*;
@@ -435,11 +435,11 @@ where
 
     /// Configure one of the interrupt pins
     ///
-    ///     lis3dh.configure_interrupt_pin(IrqPin1Conf {
+    ///     lis3dh.configure_interrupt_pin(IrqPin1Config {
     ///         // Raise if interrupt 1 is raised
     ///         ia1_en: true,
     ///         // Disable for all other interrupts
-    ///         ..IrqPin1Conf::default()
+    ///         ..IrqPin1Config::default()
     ///     })?;
     pub fn configure_interrupt_pin<P: IrqPin>(
         &mut self,

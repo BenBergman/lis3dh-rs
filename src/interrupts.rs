@@ -219,7 +219,7 @@ impl InterruptConfig {
 
 #[derive(Debug, Copy, Clone, Default)]
 #[doc(alias = "CTRL_REG3")]
-pub struct IrqPin1Conf {
+pub struct IrqPin1Config {
     pub click_en: bool,    // 7
     pub ia1_en: bool,      // 6
     pub ia2_en: bool,      // 5
@@ -231,7 +231,7 @@ pub struct IrqPin1Conf {
 
 #[derive(Debug, Copy, Clone, Default)]
 #[doc(alias = "CTRL_REG6")]
-pub struct IrqPin2Conf {
+pub struct IrqPin2Config {
     pub click_en: bool,   // 7
     pub ia1_en: bool,     // 6
     pub ia2_en: bool,     // 5
@@ -245,7 +245,7 @@ pub trait IrqPin {
     fn bits(self) -> u8;
 }
 
-impl IrqPin for IrqPin1Conf {
+impl IrqPin for IrqPin1Config {
     fn ctrl_reg() -> Register {
         Register::CTRL3
     }
@@ -261,7 +261,7 @@ impl IrqPin for IrqPin1Conf {
     }
 }
 
-impl IrqPin for IrqPin2Conf {
+impl IrqPin for IrqPin2Config {
     fn ctrl_reg() -> Register {
         Register::CTRL6
     }
