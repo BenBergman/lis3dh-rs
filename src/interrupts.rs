@@ -67,11 +67,64 @@ impl Interrupt for Interrupt2 {
     }
 }
 
-#[derive(Debug, Copy, Clone, Default)]
-pub struct InterruptSource {
-    pub and_or_combination: bool,
-    pub interrupt_active: bool,
+/// When to generate an interrupt.
+///
+/// Internal representation:
+///
+/// | AOI | 6D | Interrupt mode |
+/// | - | - | --- |
+/// | 0 | 0 | OR combination of interrupt events  |
+/// | 0 | 1 | 6-direction movement recognition  |
+/// | 1 | 0 | AND combination of interrupt events  |
+/// | 1 | 1 | 6-direction position recognition  |
+#[derive(Debug, Copy, Clone)]
+pub enum InterruptMode {
+    OrCombination = 0b00 << 6,
+    Movement = 0b01 << 6,
+    AndCombination = 0b10 << 6,
+    Position = 0b11 << 6,
+}
 
+impl Default for InterruptMode {
+    fn default() -> Self {
+        InterruptMode::OrCombination
+    }
+}
+
+impl InterruptMode {
+    const fn from_bits(input: u8) -> Self {
+        match input >> 6 {
+            0b00 => InterruptMode::OrCombination,
+            0b01 => InterruptMode::Movement,
+            0b10 => InterruptMode::AndCombination,
+            0b11 => InterruptMode::Position,
+            _ => {
+                // change to unreachable when https://github.com/rust-lang/rust/issues/51999 is stable
+                InterruptMode::Position
+            }
+        }
+    }
+    const fn to_bits(self) -> u8 {
+        match self {
+            InterruptMode::OrCombination => 0b00 << 6,
+            InterruptMode::Movement => 0b01 << 6,
+            InterruptMode::AndCombination => 0b10 << 6,
+            InterruptMode::Position => 0b11 << 6,
+        }
+    }
+}
+
+impl From<u8> for InterruptMode {
+    fn from(input: u8) -> Self {
+        Self::from_bits(input)
+    }
+}
+
+/// Configure which events on which axes trigger an interrupt.
+#[derive(Debug, Copy, Clone, Default)]
+#[doc(alias = "INT1_CFG")]
+#[doc(alias = "INT2_CFG")]
+pub struct InterruptConfig {
     pub z_axis_high: bool,
     pub z_axis_low: bool,
 
@@ -82,12 +135,25 @@ pub struct InterruptSource {
     pub x_axis_low: bool,
 }
 
-impl InterruptSource {
-    pub const fn all() -> Self {
+impl InterruptConfig {
+    /// Don't generate an interrupt for any event
+    pub const fn none() -> Self {
         Self {
-            and_or_combination: true,
-            interrupt_active: true,
+            z_axis_high: false,
+            z_axis_low: false,
 
+            y_axis_high: false,
+            y_axis_low: false,
+
+            x_axis_high: false,
+            x_axis_low: false,
+        }
+    }
+
+    /// Generate an interrupt for a low and a high event
+    /// on any of the axes
+    pub const fn high_and_low() -> Self {
+        Self {
             z_axis_high: true,
             z_axis_low: true,
 
@@ -99,11 +165,10 @@ impl InterruptSource {
         }
     }
 
+    /// Generate an interrupt for a high event
+    /// on any of the axes
     pub const fn high() -> Self {
         Self {
-            and_or_combination: true,
-            interrupt_active: true,
-
             z_axis_high: true,
             z_axis_low: false,
 
@@ -115,11 +180,10 @@ impl InterruptSource {
         }
     }
 
+    /// Generate an interrupt for a low event
+    /// on any of the axes
     pub const fn low() -> Self {
         Self {
-            and_or_combination: true,
-            interrupt_active: true,
-
             z_axis_high: false,
             z_axis_low: true,
 
@@ -131,19 +195,30 @@ impl InterruptSource {
         }
     }
 
-    pub const fn bits(self) -> u8 {
-        (self.and_or_combination as u8) << 7
-            | (self.interrupt_active as u8) << 6
+    pub fn to_bits(self, interrupt_mode: InterruptMode) -> u8 {
+        interrupt_mode.to_bits()
             | (self.z_axis_high as u8) << 5
             | (self.z_axis_low as u8) << 4
             | (self.y_axis_high as u8) << 3
             | (self.y_axis_low as u8) << 2
             | (self.x_axis_high as u8) << 1
-            | (self.x_axis_low as u8) << 0
+            | (self.x_axis_low as u8)
+    }
+
+    pub const fn from_bits(irq_src: u8) -> Self {
+        Self {
+            z_axis_high: irq_src & (1 << 5) != 0,
+            z_axis_low: irq_src & (1 << 4) != 0,
+            y_axis_high: irq_src & (1 << 3) != 0,
+            y_axis_low: irq_src & (1 << 2) != 0,
+            x_axis_high: irq_src & (1 << 1) != 0,
+            x_axis_low: irq_src & (1 << 0) != 0,
+        }
     }
 }
 
 #[derive(Debug, Copy, Clone, Default)]
+#[doc(alias = "CTRL_REG3")]
 pub struct IrqPin1Conf {
     pub click_en: bool,    // 7
     pub ia1_en: bool,      // 6
@@ -155,6 +230,7 @@ pub struct IrqPin1Conf {
 }
 
 #[derive(Debug, Copy, Clone, Default)]
+#[doc(alias = "CTRL_REG6")]
 pub struct IrqPin2Conf {
     pub click_en: bool,   // 7
     pub ia1_en: bool,     // 6
@@ -197,5 +273,85 @@ impl IrqPin for IrqPin2Conf {
             | (self.boot_en as u8) << 4
             | (self.act_en as u8) << 3
             | (self.active_low as u8) << 1
+    }
+}
+
+#[derive(Debug, Copy, Clone, Default)]
+#[doc(alias = "INT1_SRC")]
+#[doc(alias = "INT2_SRC")]
+pub struct InterruptSource {
+    pub interrupt_active: bool,
+
+    pub z_axis_high: bool,
+    pub z_axis_low: bool,
+
+    pub y_axis_high: bool,
+    pub y_axis_low: bool,
+
+    pub x_axis_high: bool,
+    pub x_axis_low: bool,
+}
+
+impl InterruptSource {
+    pub const fn from_bits(input: u8) -> Self {
+        // NOTE the leftmost bit is unused
+        Self {
+            interrupt_active: input & (1 << 6) != 0,
+            z_axis_high: input & (1 << 5) != 0,
+            z_axis_low: input & (1 << 4) != 0,
+            y_axis_high: input & (1 << 3) != 0,
+            y_axis_low: input & (1 << 2) != 0,
+            x_axis_high: input & (1 << 1) != 0,
+            x_axis_low: input & (1 << 0) != 0,
+        }
+    }
+}
+
+/// Latch (keep active) the interrupt until the [`get_irq_src`] is read.
+///
+/// [`get_irq_src`]: crate::Lis3dh::get_irq_src
+#[derive(Debug, Copy, Clone)]
+pub enum LatchInterruptRequest {
+    Enable,
+    Disable,
+}
+
+impl Default for LatchInterruptRequest {
+    fn default() -> Self {
+        LatchInterruptRequest::Disable
+    }
+}
+
+impl From<bool> for LatchInterruptRequest {
+    fn from(input: bool) -> Self {
+        if input {
+            Self::Enable
+        } else {
+            Self::Disable
+        }
+    }
+}
+
+/// 4D detection is a subset of the 6D detection where detection on the Z axis is disabled.
+/// This setting only has effect when the interrupt mode is either `Movement` or `Position`.
+#[derive(Debug, Copy, Clone)]
+pub enum Detect4D {
+    Enable,
+    Disable,
+}
+
+impl Default for Detect4D {
+    fn default() -> Self {
+        Detect4D::Disable
+    }
+}
+
+impl From<bool> for Detect4D {
+    fn from(input: bool) -> Self {
+        if input {
+            Self::Enable
+        } else {
+            Self::Disable
+        }
     }
 }
