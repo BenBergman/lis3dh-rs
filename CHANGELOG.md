@@ -1,3 +1,15 @@
+# 0.4.2
+* Interrupt support, adding methods
+    
+    - `configure_interrupt_pin`
+    - `configure_irq_src_and_control`
+    - `configure_irq_src`
+    - `configure_irq_duration`
+    - `configure_irq_threshold`
+    - `get_irq_src`
+    - `configure_switch_to_low_power`
+    - `configure_irq_src_and_control`
+
 # 0.4.1
 * Spi support
 * BREAKING - new method has been replaced by new_i2c or new_spi.
