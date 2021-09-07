@@ -11,6 +11,11 @@ Platform-agnostic Rust driver for the ST LIS3DH 3-axis MEMS "nano" accelerometer
 - [LIS3DH product page][product-page]
 - [LIS3DH datasheet][datasheet]
 
+### Examples
+
+- [CPX](https://github.com/BenBergman/lis3dh-rs/blob/master/examples/cpx.rs)
+- [Interrupts](https://github.com/tweedegolf/lis3dh-interrupt-demo)
+
 ## License
 
 Dual licensed under your choice of either of:
