@@ -38,7 +38,7 @@ fn main() -> ! {
         pins.accel_scl.into_pad(&mut pins.port),
     );
 
-    let mut lis3dh = Lis3dh::new(i2c, SlaveAddr::Alternate).unwrap();
+    let mut lis3dh = Lis3dh::new_i2c(i2c, SlaveAddr::Alternate).unwrap();
     lis3dh.set_range(lis3dh::Range::G8).unwrap();
     let mut delay = Delay::new(core.SYST, &mut clocks);
 
