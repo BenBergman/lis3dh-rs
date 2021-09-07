@@ -118,8 +118,49 @@ pub enum Range {
 }
 
 impl Range {
-    pub fn bits(self) -> u8 {
+    pub const fn bits(self) -> u8 {
         self as u8
+    }
+
+    /// Convert the range into an value in mili-g
+    pub const fn as_mg(self) -> u8 {
+        match self {
+            Range::G16 => 186,
+            Range::G8 => 62,
+            Range::G4 => 32,
+            Range::G2 => 16,
+        }
+    }
+}
+
+impl Default for Range {
+    fn default() -> Self {
+        Range::G2
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct Threshold(pub(crate) u8);
+
+impl Threshold {
+    /// Convert a value in multiples of the `g` constant (roughly 9.81) to a threshold.
+    ///
+    ///     assert_eq!(Threshold::g(Range::G2, 1.1), 69);
+    #[inline(always)]
+    pub fn g(range: Range, gs: f32) -> Self {
+        Self::mg(range, gs * 1000.0)
+    }
+
+    #[inline(always)]
+    pub fn mg(range: Range, mgs: f32) -> Self {
+        let value = mgs / (range.as_mg() as f32);
+        let truncated = value as u64;
+
+        let round_up = value - (truncated as f32) > 0.5;
+
+        let result = if round_up { truncated + 1 } else { truncated };
+
+        Threshold(result as u8)
     }
 }
 
@@ -154,11 +195,11 @@ pub enum DataRate {
 }
 
 impl DataRate {
-    pub fn bits(self) -> u8 {
+    pub const fn bits(self) -> u8 {
         self as u8
     }
 
-    pub fn sample_rate(self) -> f32 {
+    pub const fn sample_rate(self) -> f32 {
         match self {
             DataRate::Hz_400 => 400.0,
             DataRate::Hz_200 => 200.0,
@@ -169,6 +210,29 @@ impl DataRate {
             DataRate::Hz_1 => 1.0,
             DataRate::PowerDown => 0.0,
         }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct Duration(pub(crate) u8);
+
+impl Duration {
+    /// Convert a number of seconds into a duration. Internally a duration is represented
+    /// as a multiple of `1 / ODR` where ODR (the output data rate) is of type [`DataRate`].
+    #[inline(always)]
+    pub fn seconds(output_data_rate: DataRate, seconds: f32) -> Self {
+        let duration = output_data_rate.sample_rate() * seconds;
+
+        Self(duration as u8)
+    }
+
+    /// Convert a number of miliseconds into a duration. Internally a duration is represented
+    /// as a multiple of `1 / ODR` where ODR (the output data rate) is of type [`DataRate`].
+    ///
+    ///     assert_eq!(Duration::miliseconds(DataRate::Hz_400, 25.0), 10);
+    #[inline(always)]
+    pub fn miliseconds(output_data_rate: DataRate, miliseconds: f32) -> Self {
+        Self::seconds(output_data_rate, miliseconds * 1000.0)
     }
 }
 

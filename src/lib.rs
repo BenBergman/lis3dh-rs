@@ -23,9 +23,17 @@ use embedded_hal::blocking::spi::{self, Transfer};
 
 use embedded_hal::digital::v2::OutputPin;
 
+mod interrupts;
 mod register;
+
+use interrupts::*;
+pub use interrupts::{
+    Detect4D, Interrupt1, Interrupt2, InterruptConfig, InterruptMode, InterruptSource, IrqPin,
+    IrqPin1Config, IrqPin2Config, LatchInterruptRequest,
+};
+
 use register::*;
-pub use register::{DataRate, DataStatus, Mode, Range, SlaveAddr};
+pub use register::{DataRate, DataStatus, Duration, Mode, Range, SlaveAddr, Threshold};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
@@ -87,6 +95,14 @@ where
         i2c: I2C,
         address: SlaveAddr,
     ) -> Result<Self, Error<E, core::convert::Infallible>> {
+        Self::new_i2c_with_config(i2c, address, Configuration::default())
+    }
+
+    pub fn new_i2c_with_config(
+        i2c: I2C,
+        address: SlaveAddr,
+        config: Configuration,
+    ) -> Result<Self, Error<E, core::convert::Infallible>> {
         let core = Lis3dhI2C {
             i2c,
             address: address.addr(),
@@ -94,7 +110,7 @@ where
 
         let mut lis3dh = Lis3dh { core };
 
-        lis3dh.initialize()?;
+        lis3dh.initialize(config)?;
 
         Ok(lis3dh)
     }
@@ -137,11 +153,19 @@ where
     ///     // create and initialize the sensor
     ///     let lis3dh = Lis3dh::new_spi(spi, cs).unwrap();
     pub fn new_spi(spi: SPI, nss: NSS) -> Result<Self, Error<ESPI, ENSS>> {
+        Self::new_spi_with_config(spi, nss, Configuration::default())
+    }
+
+    pub fn new_spi_with_config(
+        spi: SPI,
+        nss: NSS,
+        config: Configuration,
+    ) -> Result<Self, Error<ESPI, ENSS>> {
         let core = Lis3dhSPI { spi, nss };
 
         let mut lis3dh = Lis3dh { core };
 
-        lis3dh.initialize()?;
+        lis3dh.initialize(config)?;
 
         Ok(lis3dh)
     }
@@ -151,25 +175,34 @@ impl<CORE> Lis3dh<CORE>
 where
     CORE: Lis3dhCore,
 {
-    fn initialize(&mut self) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+    /// Initalize the device given the configuration
+    fn initialize(
+        &mut self,
+        conf: Configuration,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         if self.get_device_id()? != DEVICE_ID {
             return Err(Error::WrongAddress);
         }
 
-        // Block data update
-        self.write_register(Register::CTRL4, BDU)?;
+        if conf.block_data_update || conf.enable_temperature {
+            // Block data update
+            self.write_register(Register::CTRL4, BDU)?;
+        }
 
-        self.set_mode(Mode::HighResolution)?;
+        self.set_mode(conf.mode)?;
 
-        self.set_datarate(DataRate::Hz_400)?;
+        self.set_datarate(conf.datarate)?;
 
-        self.enable_axis((true, true, true))?;
+        self.enable_axis((conf.enable_x_axis, conf.enable_y_axis, conf.enable_z_axis))?;
+
+        if conf.enable_temperature {
+            self.enable_temp(true)?;
+        }
 
         // Enable ADCs.
-        self.write_register(Register::TEMP_CFG, ADC_EN)?;
-
-        Ok(())
+        self.write_register(Register::TEMP_CFG, ADC_EN)
     }
+
     /// `WHO_AM_I` register.
     pub fn get_device_id(&mut self) -> Result<u8, Error<CORE::BusError, CORE::PinError>> {
         self.read_register(Register::WHOAMI)
@@ -281,7 +314,7 @@ where
     /// Read the current full-scale.
     pub fn get_range(&mut self) -> Result<Range, Error<CORE::BusError, CORE::PinError>> {
         let ctrl4 = self.read_register(Register::CTRL4)?;
-        let fs = (ctrl4 >> 4) & 0x03;
+        let fs = (ctrl4 >> 4) & 0b0011;
 
         Range::try_from(fs).map_err(|_| Error::InvalidRange)
     }
@@ -398,6 +431,157 @@ where
         } else {
             self.register_clear_bits(reg, bits)
         }
+    }
+
+    /// Configure one of the interrupt pins
+    ///
+    ///     lis3dh.configure_interrupt_pin(IrqPin1Config {
+    ///         // Raise if interrupt 1 is raised
+    ///         ia1_en: true,
+    ///         // Disable for all other interrupts
+    ///         ..IrqPin1Config::default()
+    ///     })?;
+    pub fn configure_interrupt_pin<P: IrqPin>(
+        &mut self,
+        pin: P,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(P::ctrl_reg(), pin.bits())
+    }
+
+    /// Configure an IRQ source
+    ///
+    /// Example: configure interrupt 1 to fire when there is movement along any of the axes.
+    ///
+    ///     lis3dh.configure_irq_src(
+    ///         lis3dh::Interrupt1,
+    ///         lis3dh::InterruptMode::Movement,
+    ///         lis3dh::InterruptConfig::high_and_low(),
+    ///     )?;
+    pub fn configure_irq_src<I: Interrupt>(
+        &mut self,
+        int: I,
+        interrupt_mode: InterruptMode,
+        interrupt_config: InterruptConfig,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.configure_irq_src_and_control(
+            int,
+            interrupt_mode,
+            interrupt_config,
+            LatchInterruptRequest::default(),
+            Detect4D::default(),
+        )
+    }
+
+    /// Configure an IRQ source.
+    ///
+    /// LIS (latch interrupt request) will latch (keep active) the interrupt until the [`Lis3dh::get_irq_src`] is read.
+    ///
+    /// 4D detection is a subset of the 6D detection where detection on the Z axis is disabled.
+    /// This setting only has effect when the interrupt mode is either `Movement` or `Position`.
+    ///
+    /// Example: configure interrupt 1 to fire when there is movement along any of the axes.
+    ///
+    ///     lis3dh.configure_irq_src(
+    ///         lis3dh::Interrupt1,
+    ///         lis3dh::InterruptMode::Movement,
+    ///         lis3dh::InterruptConfig::high_and_low(),
+    ///         lis3dh::LatchInterruptRequest::Enable,
+    ///         lis3dh::Detect4D::Enable,
+    ///     )?;
+    pub fn configure_irq_src_and_control<I: Interrupt>(
+        &mut self,
+        _int: I,
+        interrupt_mode: InterruptMode,
+        interrupt_config: InterruptConfig,
+        latch_interrupt_request: LatchInterruptRequest,
+        detect_4d: Detect4D,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        let latch_interrupt_request =
+            matches!(latch_interrupt_request, LatchInterruptRequest::Enable);
+
+        let detect_4d = matches!(detect_4d, Detect4D::Enable);
+
+        if latch_interrupt_request || detect_4d {
+            let latch = (latch_interrupt_request as u8) << I::lir_int_bit();
+            let d4d = (detect_4d as u8) << I::d4d_int_bit();
+            self.register_set_bits(Register::CTRL5, latch | d4d)?;
+        }
+        self.write_register(I::cfg_reg(), interrupt_config.to_bits(interrupt_mode))
+    }
+
+    /// Set the minimum duration for the Interrupt event to be recognized.
+    ///
+    /// Example: the event has to last at least 25 miliseconds to be recognized.
+    ///
+    ///     // let mut lis3dh = ...
+    ///     let duration = Duration::miliseconds(DataRate::Hz_400, 25.0);
+    ///     lis3dh.configure_irq_duration(duration);
+    #[doc(alias = "INT1_DURATION")]
+    #[doc(alias = "INT2_DURATION")]
+    pub fn configure_irq_duration<I: Interrupt>(
+        &mut self,
+        _int: I,
+        duration: Duration,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(I::duration_reg(), duration.0)
+    }
+
+    /// Set the minimum magnitude for the Interrupt event to be recognized.
+    ///
+    /// Example: the event has have a magnitude of at least 1.1g to be recognized.
+    ///
+    ///     // let mut lis3dh = ...
+    ///     let threshold = Threshold::g(Range::G2, 1.1);
+    ///     lis3dh.configure_irq_threshold(threshold);
+    #[doc(alias = "INT1_THS")]
+    #[doc(alias = "INT2_THS")]
+    pub fn configure_irq_threshold<I: Interrupt>(
+        &mut self,
+        _int: I,
+        threshold: Threshold,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(I::ths_reg(), threshold.0)
+    }
+
+    /// Get interrupt source. The `interrupt_active` field is true when an interrupt is active.
+    /// The other fields specify what measurement caused the interrupt.
+    pub fn get_irq_src<I: Interrupt>(
+        &mut self,
+        _int: I,
+    ) -> Result<InterruptSource, Error<CORE::BusError, CORE::PinError>> {
+        let irq_src = self.read_register(I::src_reg())?;
+        Ok(InterruptSource::from_bits(irq_src))
+    }
+
+    /// Configure 'Sleep to wake' and 'Return to sleep' threshold and duration.
+    ///
+    /// The LIS3DH can be programmed to automatically switch to low-power mode upon recognition of a determined event.  
+    /// Once the event condition is over, the device returns back to the preset normal or highresolution mode.
+    ///
+    /// Example: enter low-power mode. When a measurement above 1.1g is registered, then wake up
+    /// for 25ms to send the data.
+    ///
+    ///     // let mut lis3dh = ...
+    ///
+    ///     let range = Range::default();
+    ///     let data_rate = DataRate::Hz_400;
+    ///     
+    ///     let threshold = Threshold::g(range, 1.1);
+    ///     let duration = Duration::miliseconds(data_rate, 25.0);
+    ///     
+    ///     lis3dh.configure_switch_to_low_power(threshold, duration)?;
+    ///     
+    ///     lis3dh.set_datarate(data_rate)?;
+    #[doc(alias = "ACT_THS")]
+    #[doc(alias = "ACT_DUR")]
+    #[doc(alias = "act")]
+    pub fn configure_switch_to_low_power(
+        &mut self,
+        threshold: Threshold,
+        duration: Duration,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(Register::ACT_THS, threshold.0 & 0b0111_1111)?;
+        self.write_register(Register::ACT_DUR, duration.0)
     }
 }
 
