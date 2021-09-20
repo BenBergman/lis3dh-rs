@@ -401,7 +401,7 @@ where
     }
 
     /// Clear the given bits in the given register.
-    fn register_clear_bits(
+    pub fn register_clear_bits(
         &mut self,
         reg: Register,
         bits: u8,
@@ -410,7 +410,7 @@ where
     }
 
     /// Set the given bits in the given register.
-    fn register_set_bits(
+    pub fn register_set_bits(
         &mut self,
         reg: Register,
         bits: u8,
