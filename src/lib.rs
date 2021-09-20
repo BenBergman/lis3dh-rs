@@ -33,7 +33,7 @@ pub use interrupts::{
 };
 
 use register::*;
-pub use register::{DataRate, DataStatus, Duration, Mode, Range, SlaveAddr, Threshold};
+pub use register::{DataRate, DataStatus, Duration, Mode, Range, Register, SlaveAddr, Threshold};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
