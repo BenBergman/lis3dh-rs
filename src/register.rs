@@ -139,7 +139,7 @@ impl Default for Range {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub struct Threshold(pub(crate) u8);
 
 impl Threshold {
@@ -162,6 +162,8 @@ impl Threshold {
 
         Threshold(result as u8)
     }
+
+    pub const ZERO: Self = Threshold(0);
 }
 
 /// Output data rate.
@@ -213,7 +215,7 @@ impl DataRate {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub struct Duration(pub(crate) u8);
 
 impl Duration {
@@ -234,6 +236,8 @@ impl Duration {
     pub fn miliseconds(output_data_rate: DataRate, miliseconds: f32) -> Self {
         Self::seconds(output_data_rate, miliseconds * 1000.0)
     }
+
+    pub const ZERO: Self = Duration(0);
 }
 
 /// Data status structure. Decoded from the `STATUS_REG` register.
