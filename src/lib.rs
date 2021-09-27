@@ -110,7 +110,7 @@ where
 
         let mut lis3dh = Lis3dh { core };
 
-        lis3dh.initialize(config)?;
+        lis3dh.configure(config)?;
 
         Ok(lis3dh)
     }
@@ -165,7 +165,7 @@ where
 
         let mut lis3dh = Lis3dh { core };
 
-        lis3dh.initialize(config)?;
+        lis3dh.configure(config)?;
 
         Ok(lis3dh)
     }
@@ -176,7 +176,7 @@ where
     CORE: Lis3dhCore,
 {
     /// Initalize the device given the configuration
-    fn initialize(
+    pub fn configure(
         &mut self,
         conf: Configuration,
     ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
