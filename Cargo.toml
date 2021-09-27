@@ -25,3 +25,5 @@ circuit_playground_express = { version = "~0.7", features = ["use_semihosting"] 
 cortex-m-rt = "~0.6"
 cortex-m-semihosting = "~0.3"
 panic-halt = "~0.2"
+
+[workspace]
