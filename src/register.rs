@@ -329,3 +329,24 @@ pub const ZYXDA: u8 = 0b0000_1000;
 pub const ZDA: u8 = 0b0000_0100;
 pub const YDA: u8 = 0b0000_0010;
 pub const XDA: u8 = 0b0000_0001;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn threshold_g_vs_mg() {
+        assert_eq!(
+            Threshold::g(Range::G2, 1.5),
+            Threshold::mg(Range::G2, 1500.0)
+        );
+    }
+
+    #[test]
+    fn duration_seconds_vs_miliseconds() {
+        assert_eq!(
+            Duration::seconds(DataRate::Hz_400, 1.5),
+            Duration::miliseconds(DataRate::Hz_400, 1500.0)
+        );
+    }
+}
