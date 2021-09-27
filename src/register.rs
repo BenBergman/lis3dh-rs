@@ -1,3 +1,4 @@
+use core::convert::TryInto;
 use num_enum::TryFromPrimitive;
 
 /// Possible I²C slave addresses.
@@ -154,13 +155,21 @@ impl Threshold {
     #[inline(always)]
     pub fn mg(range: Range, mgs: f32) -> Self {
         let value = mgs / (range.as_mg() as f32);
-        let truncated = value as u64;
 
-        let round_up = value - (truncated as f32) > 0.5;
+        // a crude `.ceil()`, which is not available in with no_std
+        let result = {
+            let truncated = value as u64;
 
-        let result = if round_up { truncated + 1 } else { truncated };
+            let round_up = value - (truncated as f32) > 0.0;
 
-        Threshold(result as u8)
+            if round_up {
+                truncated + 1
+            } else {
+                truncated
+            }
+        };
+
+        Threshold(result.try_into().unwrap())
     }
 
     pub const ZERO: Self = Threshold(0);
