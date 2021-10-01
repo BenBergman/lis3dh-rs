@@ -281,6 +281,83 @@ pub struct DataStatus {
     pub xyzda: (bool, bool, bool),
 }
 
+/// Information about what is stored in the FIFO
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct FifoStatus {
+    /// The watermark bit is set high when FIFO content exceeds watermark level
+    pub watermark: bool,
+    /// The overrun bit is set high when FIFO buffer is full; this means that the FIFO buffer
+    /// contains 32 unread samples. At the following ODR a new sample set replaces the
+    /// oldest FIFO value. The OVRN bit is set to 0 when the first sample set has been
+    /// read
+    pub overrun: bool,
+    /// The empty bit is set high when all FIFO samples have been read and FIFO is empty
+    pub empty: bool,
+    /// The current number of unread samples stored in the
+    /// FIFO buffer. When FIFO is enabled, this value increases
+    /// at ODR frequency until the buffer is full, whereas,
+    /// it decreases every time one sample set is retrieved from FIFO.
+    pub stack_size: u8,
+}
+
+impl FifoStatus {
+    /// Interpret the content of the `FIFO_SRC_REG` register
+    pub const fn from_bits(status: u8) -> Self {
+        Self {
+            watermark: (status >> 7) & 1 == 1,
+            overrun: (status >> 6) & 1 == 1,
+            empty: (status >> 5) & 1 == 1,
+            stack_size: status & 0b0001_1111,
+        }
+    }
+}
+
+/// FIFO behavior. See [the spec](https://www.st.com/resource/en/datasheet/lis3dh.pdf#page=22) for
+/// full details.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FifoMode {
+    /// The FIFO is not operational
+    ByPass,
+    /// In FIFO mode, the buffer continues filling data from the X, Y and Z accelerometer channels
+    /// until it is full (a set of 32 samples stored). When the FIFO is full, it stops collecting data from
+    /// the input channels and the FIFO content remains unchanged.
+    Fifo,
+    /// In Stream mode the FIFO continues filling data from the X, Y, and Z accelerometer channels
+    /// until the buffer is full (a set of 32 samples stored) at which point the FIFO buffer index
+    /// restarts from the beginning and older data is replaced by the current data. The oldest values
+    /// continue to be overwritten until a read operation frees the FIFO slots
+    Stream,
+    /// In Stream-to-FIFO mode, data from the X, Y and Z accelerometer channels are collected in
+    /// a combination of Stream mode and FIFO mode. The FIFO buffer starts operating in Stream
+    /// mode and switches to FIFO mode when interrupt 1 occurs.
+    StreamToFifoInt1,
+    /// In Stream-to-FIFO mode, data from the X, Y and Z accelerometer channels are collected in
+    /// a combination of Stream mode and FIFO mode. The FIFO buffer starts operating in Stream
+    /// mode and switches to FIFO mode when interrupt 2 occurs.
+    StreamToFifoInt2,
+}
+
+impl FifoMode {
+    /// Convert the mode to bits that can be written to the `FIFO_CTRL_REG` register.
+    pub const fn to_bits(self) -> u8 {
+        let mut trigger = false;
+
+        let mode = match self {
+            FifoMode::ByPass => 0b00,
+            FifoMode::Fifo => 0b01,
+            FifoMode::Stream => 0b10,
+            FifoMode::StreamToFifoInt1 => 0b11,
+            FifoMode::StreamToFifoInt2 => {
+                trigger = true;
+
+                0b11
+            }
+        };
+
+        mode << 6 | (trigger as u8) << 5
+    }
+}
+
 /// Operating mode.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
