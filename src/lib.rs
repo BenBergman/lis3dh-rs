@@ -175,7 +175,7 @@ impl<CORE> Lis3dh<CORE>
 where
     CORE: Lis3dhCore,
 {
-    /// Initalize the device given the configuration
+    /// Configure the device
     pub fn configure(
         &mut self,
         conf: Configuration,
@@ -400,7 +400,11 @@ where
         self.write_register(register, f(value))
     }
 
-    /// Clear the given bits in the given register.
+    /// Clear the given bits in the given register. For example:
+    ///
+    ///     lis3dh.register_clear_bits(0b0110)
+    ///
+    /// This call clears (sets to 0) the bits at index 1 and 2. Other bits of the register are not touched.
     pub fn register_clear_bits(
         &mut self,
         reg: Register,
@@ -409,7 +413,11 @@ where
         self.modify_register(reg, |v| v & !bits)
     }
 
-    /// Set the given bits in the given register.
+    /// Set the given bits in the given register. For example:
+    ///
+    ///     lis3dh.register_set_bits(0b0110)
+    ///
+    /// This call sets to 1 the bits at index 1 and 2. Other bits of the register are not touched.
     pub fn register_set_bits(
         &mut self,
         reg: Register,
@@ -528,7 +536,7 @@ where
 
     /// Set the minimum magnitude for the Interrupt event to be recognized.
     ///
-    /// Example: the event has have a magnitude of at least 1.1g to be recognized.
+    /// Example: the event has to have a magnitude of at least 1.1g to be recognized.
     ///
     ///     // let mut lis3dh = ...
     ///     let threshold = Threshold::g(Range::G2, 1.1);
