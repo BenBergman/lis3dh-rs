@@ -33,7 +33,10 @@ pub use interrupts::{
 };
 
 use register::*;
-pub use register::{DataRate, DataStatus, Duration, Mode, Range, Register, SlaveAddr, Threshold};
+pub use register::{
+    DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register, SlaveAddr,
+    Threshold,
+};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
@@ -590,6 +593,39 @@ where
     ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.write_register(Register::ACT_THS, threshold.0 & 0b0111_1111)?;
         self.write_register(Register::ACT_DUR, duration.0)
+    }
+
+    /// Reboot memory content
+    pub fn reboot_memory_content(&mut self) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.register_set_bits(Register::CTRL5, 0b1000_0000)
+    }
+
+    const FIFO_ENABLE_BIT: u8 = 0b0100_0000;
+
+    /// Configures FIFO and then enables it
+    pub fn enable_fifo(
+        &mut self,
+        mode: FifoMode,
+        threshold: u8,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        debug_assert!(threshold <= 0b0001_1111);
+
+        let bits = (threshold & 0b0001_1111) | mode.to_bits();
+        self.write_register(Register::FIFO_CTRL, bits)?;
+        self.register_set_bits(Register::CTRL5, Self::FIFO_ENABLE_BIT)
+    }
+
+    /// Disable FIFO. This resets the FIFO state
+    pub fn disable_fifo(&mut self) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(Register::FIFO_CTRL, 0x00)?;
+        self.register_clear_bits(Register::CTRL5, Self::FIFO_ENABLE_BIT)
+    }
+
+    /// Get the status of the FIFO
+    pub fn get_fifo_status(&mut self) -> Result<FifoStatus, Error<CORE::BusError, CORE::PinError>> {
+        let status = self.read_register(Register::FIFO_SRC)?;
+
+        Ok(FifoStatus::from_bits(status))
     }
 }
 
