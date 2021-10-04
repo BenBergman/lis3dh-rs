@@ -908,6 +908,7 @@ where
 }
 
 /// Sensor configuration options
+#[derive(Debug, Clone, Copy)]
 pub struct Configuration {
     /// The operating mode, default [`Mode::HighResolution`].
     pub mode: Mode,
