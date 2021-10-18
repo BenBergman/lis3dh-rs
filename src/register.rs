@@ -156,23 +156,25 @@ impl Threshold {
     pub fn mg(range: Range, mgs: f32) -> Self {
         let value = mgs / (range.as_mg() as f32);
 
-        // a crude `.ceil()`, which is not available in with no_std
-        let result = {
-            let truncated = value as u64;
-
-            let round_up = value - (truncated as f32) > 0.0;
-
-            if round_up {
-                truncated + 1
-            } else {
-                truncated
-            }
-        };
+        let result = crude_ceil(value);
 
         Threshold(result.try_into().unwrap())
     }
 
     pub const ZERO: Self = Threshold(0);
+}
+
+/// a crude `.ceil()`, the std one is not currently available when using no_std
+fn crude_ceil(value: f32) -> u64 {
+    let truncated = value as u64;
+
+    let round_up = value - (truncated as f32) > 0.0;
+
+    if round_up {
+        truncated + 1
+    } else {
+        truncated
+    }
 }
 
 /// Output data rate.
