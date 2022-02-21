@@ -1,12 +1,13 @@
 [package]
 name = "lis3dh"
 description = "An embedded-hal driver for the LIS3DH accelerometer that implements the generic accelerometer trait"
-version = "0.4.1"
+version = "0.4.2"
 license = "Apache-2.0 OR MIT"
 authors = [
     "Benjamin Bergman <ben@benbergman.ca>",
     "Paul Sajna <sajattack@gmail.com>",
     "Jesse Braham <jesse@beta7.io>",
+    "Folkert de Vries <folkert@folkertdev.nl>"
 ]
 keywords = [
     "embedded-hal-driver",
