@@ -33,7 +33,10 @@ pub use interrupts::{
 };
 
 use register::*;
-pub use register::{DataRate, DataStatus, Duration, Mode, Range, SlaveAddr, Threshold};
+pub use register::{
+    DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register, SlaveAddr,
+    Threshold,
+};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
@@ -110,7 +113,7 @@ where
 
         let mut lis3dh = Lis3dh { core };
 
-        lis3dh.initialize(config)?;
+        lis3dh.configure(config)?;
 
         Ok(lis3dh)
     }
@@ -165,7 +168,7 @@ where
 
         let mut lis3dh = Lis3dh { core };
 
-        lis3dh.initialize(config)?;
+        lis3dh.configure(config)?;
 
         Ok(lis3dh)
     }
@@ -175,8 +178,8 @@ impl<CORE> Lis3dh<CORE>
 where
     CORE: Lis3dhCore,
 {
-    /// Initalize the device given the configuration
-    fn initialize(
+    /// Configure the device
+    pub fn configure(
         &mut self,
         conf: Configuration,
     ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
@@ -400,8 +403,12 @@ where
         self.write_register(register, f(value))
     }
 
-    /// Clear the given bits in the given register.
-    fn register_clear_bits(
+    /// Clear the given bits in the given register. For example:
+    ///
+    ///     lis3dh.register_clear_bits(0b0110)
+    ///
+    /// This call clears (sets to 0) the bits at index 1 and 2. Other bits of the register are not touched.
+    pub fn register_clear_bits(
         &mut self,
         reg: Register,
         bits: u8,
@@ -409,8 +416,12 @@ where
         self.modify_register(reg, |v| v & !bits)
     }
 
-    /// Set the given bits in the given register.
-    fn register_set_bits(
+    /// Set the given bits in the given register. For example:
+    ///
+    ///     lis3dh.register_set_bits(0b0110)
+    ///
+    /// This call sets to 1 the bits at index 1 and 2. Other bits of the register are not touched.
+    pub fn register_set_bits(
         &mut self,
         reg: Register,
         bits: u8,
@@ -528,7 +539,7 @@ where
 
     /// Set the minimum magnitude for the Interrupt event to be recognized.
     ///
-    /// Example: the event has have a magnitude of at least 1.1g to be recognized.
+    /// Example: the event has to have a magnitude of at least 1.1g to be recognized.
     ///
     ///     // let mut lis3dh = ...
     ///     let threshold = Threshold::g(Range::G2, 1.1);
@@ -582,6 +593,39 @@ where
     ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
         self.write_register(Register::ACT_THS, threshold.0 & 0b0111_1111)?;
         self.write_register(Register::ACT_DUR, duration.0)
+    }
+
+    /// Reboot memory content
+    pub fn reboot_memory_content(&mut self) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.register_set_bits(Register::CTRL5, 0b1000_0000)
+    }
+
+    const FIFO_ENABLE_BIT: u8 = 0b0100_0000;
+
+    /// Configures FIFO and then enables it
+    pub fn enable_fifo(
+        &mut self,
+        mode: FifoMode,
+        threshold: u8,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        debug_assert!(threshold <= 0b0001_1111);
+
+        let bits = (threshold & 0b0001_1111) | mode.to_bits();
+        self.write_register(Register::FIFO_CTRL, bits)?;
+        self.register_set_bits(Register::CTRL5, Self::FIFO_ENABLE_BIT)
+    }
+
+    /// Disable FIFO. This resets the FIFO state
+    pub fn disable_fifo(&mut self) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(Register::FIFO_CTRL, 0x00)?;
+        self.register_clear_bits(Register::CTRL5, Self::FIFO_ENABLE_BIT)
+    }
+
+    /// Get the status of the FIFO
+    pub fn get_fifo_status(&mut self) -> Result<FifoStatus, Error<CORE::BusError, CORE::PinError>> {
+        let status = self.read_register(Register::FIFO_SRC)?;
+
+        Ok(FifoStatus::from_bits(status))
     }
 }
 
@@ -864,6 +908,7 @@ where
 }
 
 /// Sensor configuration options
+#[derive(Debug, Clone, Copy)]
 pub struct Configuration {
     /// The operating mode, default [`Mode::HighResolution`].
     pub mode: Mode,
