@@ -387,6 +387,34 @@ where
         Ok(temp_out as f32 / 256.0 + 25.0)
     }
 
+    /// Click detection source.
+    fn get_click_src(&mut self) -> Result<ClickSrc, Error<CORE::BusError, CORE::PinError>> {
+        let click_src = self.read_register(Register::CLICK_SRC)?;
+
+        Ok(ClickSrc {
+            ia: (click_src & IA) != 0,
+            sign: (click_src & SIGN) != 0,
+            sclick: (click_src & SCLICK) != 0,
+            dclick: (click_src & DCLICK) != 0,
+            z: (click_src & Z) != 0,
+            y: (click_src & Y) != 0,
+            x: (click_src & X) != 0,
+        })
+    }
+
+    /// Report number of clicks detected.
+    pub fn click_count(&mut self) -> Result<usize, Error<CORE::BusError, CORE::PinError>> {
+        let click_src = self.get_click_src()?;
+
+        if click_src.sclick {
+            Ok(1)
+        } else if click_src.dclick {
+            Ok(2)
+        } else {
+            Ok(0)
+        }
+    }
+
     /// Modify a register's value. Read the current value of the register,
     /// update the value with the provided function, and set the register to
     /// the return value.

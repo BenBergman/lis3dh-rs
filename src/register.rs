@@ -251,6 +251,27 @@ impl Duration {
     pub const ZERO: Self = Duration(0);
 }
 
+/// Click source structure. Decoded from the `CLICK_SRC` register.
+///
+/// `CLICK_SRC` has the following bit fields:
+///  * `IA` - Click interrupt has been generated
+///  * `DCLICK` - Double-click active
+///  * `SCLICK` - Single-click active
+///  * `SIGN` - Click sign
+///  * `Z` - Z click detection
+///  * `Y` - Y click detection
+///  * `X` - X click detection
+#[derive(Debug)]
+pub struct ClickSrc {
+    pub ia: bool,
+    pub dclick: bool,
+    pub sclick: bool,
+    pub sign: bool,
+    pub z: bool,
+    pub y: bool,
+    pub x: bool,
+}
+
 /// Data status structure. Decoded from the `STATUS_REG` register.
 ///
 /// `STATUS_REG` has the following bit fields:
@@ -408,6 +429,16 @@ pub const ZYXDA: u8 = 0b0000_1000;
 pub const ZDA: u8 = 0b0000_0100;
 pub const YDA: u8 = 0b0000_0010;
 pub const XDA: u8 = 0b0000_0001;
+
+// === CLICK_SRC (39h) ===
+
+pub const IA: u8 = 0b0100_0000;
+pub const DCLICK: u8 = 0b0010_0000;
+pub const SCLICK: u8 = 0b0001_0000;
+pub const SIGN: u8 = 0b0000_1000;
+pub const Z: u8 = 0b0000_0100;
+pub const Y: u8 = 0b0000_0010;
+pub const X: u8 = 0b0000_0001;
 
 #[cfg(test)]
 mod test {
