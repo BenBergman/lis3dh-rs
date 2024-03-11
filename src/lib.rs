@@ -34,8 +34,8 @@ pub use interrupts::{
 
 use register::*;
 pub use register::{
-    DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register, SlaveAddr,
-    Threshold,
+    ClickCount, DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register,
+    SlaveAddr, Threshold,
 };
 
 /// Accelerometer errors, generic around another error type `E` representing
