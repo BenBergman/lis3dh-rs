@@ -34,8 +34,8 @@ pub use interrupts::{
 
 use register::*;
 pub use register::{
-    DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register, SlaveAddr,
-    Threshold,
+    ClickCount, DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register,
+    SlaveAddr, Threshold,
 };
 
 /// Accelerometer errors, generic around another error type `E` representing
@@ -385,6 +385,74 @@ where
         let temp_out = self.get_temp_out()?;
 
         Ok(temp_out as f32 / 256.0 + 25.0)
+    }
+
+    /// Configure click threshold.
+    ///
+    /// lir_click: If this bit is set, the interrupt is
+    /// kept high until the CLICK_SRC register is read. Otherwise, the
+    /// interrupt is high for the duration of the click event.
+    ///
+    /// threshold: The threshold for click detection from 0-127, in
+    /// increments of (full scale (in G's) / 128).
+    pub fn set_click_threshold(
+        &mut self,
+        lir_click: bool,
+        threshold: u8,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        let value = if lir_click {
+            LIR_CLICK | threshold
+        } else {
+            !LIR_CLICK & threshold
+        };
+        self.write_register(Register::CLICK_THS, value)
+    }
+
+    /// Set click time limit.
+    ///
+    /// time_limit: The time interval between the start and end of a click
+    /// event, from 0-255, in increments of (1/ODR) e.g 2.5ms at 400Hz.
+    pub fn set_click_time_limit(
+        &mut self,
+        time_limit: u8,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(Register::TIME_LIMIT, time_limit)
+    }
+
+    /// Enable single- or double-click detection.
+    pub fn enable_xyz_click_detection(
+        &mut self,
+        count: ClickCount,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        self.write_register(Register::CLICK_CFG, count as u8)
+    }
+
+    /// Click detection source.
+    fn get_click_src(&mut self) -> Result<ClickSrc, Error<CORE::BusError, CORE::PinError>> {
+        let click_src = self.read_register(Register::CLICK_SRC)?;
+
+        Ok(ClickSrc {
+            ia: (click_src & IA) != 0,
+            sign: (click_src & SIGN) != 0,
+            sclick: (click_src & SCLICK) != 0,
+            dclick: (click_src & DCLICK) != 0,
+            z: (click_src & Z) != 0,
+            y: (click_src & Y) != 0,
+            x: (click_src & X) != 0,
+        })
+    }
+
+    /// Report number of clicks detected.
+    pub fn click_count(&mut self) -> Result<usize, Error<CORE::BusError, CORE::PinError>> {
+        let click_src = self.get_click_src()?;
+
+        if click_src.sclick {
+            Ok(1)
+        } else if click_src.dclick {
+            Ok(2)
+        } else {
+            Ok(0)
+        }
     }
 
     /// Modify a register's value. Read the current value of the register,
