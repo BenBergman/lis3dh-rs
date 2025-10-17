@@ -251,6 +251,55 @@ impl Duration {
     pub const ZERO: Self = Duration(0);
 }
 
+/// High-pass filter mode selection.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum HighPassFilterMode {
+    /// Normal mode (reset by reading REFERENCE register)
+    Normal = 0b00,
+    /// Reference signal for filtering
+    Reference = 0b01,
+    /// Autoreset on interrupt event
+    AutoresetOnInterrupt = 0b10,
+}
+
+impl Default for HighPassFilterMode {
+    fn default() -> Self {
+        HighPassFilterMode::Normal
+    }
+}
+
+/// High-pass filter cutoff frequency.
+/// Actual cutoff frequency depends on ODR (output data rate).
+/// See LIS3DH datasheet Table 27 for frequency values.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum HighPassFilterCutoff {
+    /// Lowest cutoff frequency
+    Lowest = 0b00,
+    /// Low cutoff frequency
+    Low = 0b01,
+    /// Medium cutoff frequency
+    Medium = 0b10,
+    /// High cutoff frequency
+    High = 0b11,
+}
+
+impl Default for HighPassFilterCutoff {
+    fn default() -> Self {
+        HighPassFilterCutoff::Lowest
+    }
+}
+
+/// High-pass filter configuration.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct HighPassFilterConfig {
+    pub mode: HighPassFilterMode,
+    pub cutoff: HighPassFilterCutoff,
+    pub enable_for_interrupt1: bool,
+    pub enable_for_interrupt2: bool,
+    pub enable_for_click: bool,
+    pub enable_for_data: bool,
+}
+
 /// Click source structure. Decoded from the `CLICK_SRC` register.
 ///
 /// `CLICK_SRC` has the following bit fields:
@@ -429,6 +478,13 @@ pub const ZYXDA: u8 = 0b0000_1000;
 pub const ZDA: u8 = 0b0000_0100;
 pub const YDA: u8 = 0b0000_0010;
 pub const XDA: u8 = 0b0000_0001;
+
+// === CTRL_REG2 (21h) ===
+
+pub const FDS: u8 = 0b0000_1000;
+pub const HPCLICK: u8 = 0b0000_0100;
+pub const HPIS2: u8 = 0b0000_0010;
+pub const HPIS1: u8 = 0b0000_0001;
 
 // === CLICK_CFG (38h) ===
 

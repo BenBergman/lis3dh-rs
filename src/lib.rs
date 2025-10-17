@@ -34,8 +34,8 @@ pub use interrupts::{
 
 use register::*;
 pub use register::{
-    ClickCount, DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register,
-    SlaveAddr, Threshold,
+    ClickCount, DataRate, DataStatus, Duration, FifoMode, FifoStatus, HighPassFilterConfig,
+    HighPassFilterCutoff, HighPassFilterMode, Mode, Range, Register, SlaveAddr, Threshold,
 };
 
 /// Accelerometer errors, generic around another error type `E` representing
@@ -630,6 +630,72 @@ where
     ) -> Result<InterruptSource, Error<CORE::BusError, CORE::PinError>> {
         let irq_src = self.read_register(I::src_reg())?;
         Ok(InterruptSource::from_bits(irq_src))
+    }
+
+    /// Configure high-pass filter.
+    ///
+    /// The high-pass filter can be applied to interrupt paths and/or data output.
+    /// This is useful for motion detection where you want to remove the DC component (gravity).
+    ///
+    /// Example: enable high-pass filter for interrupt 1 only, keep data output unfiltered.
+    ///
+    ///     lis3dh.configure_high_pass_filter(HighPassFilterConfig {
+    ///         enable_for_interrupt1: true,
+    ///         ..Default::default()
+    ///     })?;
+    #[doc(alias = "CTRL_REG2")]
+    #[doc(alias = "HPF")]
+    pub fn configure_high_pass_filter(
+        &mut self,
+        config: HighPassFilterConfig,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        let mut ctrl2 = 0u8;
+
+        ctrl2 |= (config.mode as u8) << 6;
+        ctrl2 |= (config.cutoff as u8) << 4;
+
+        if config.enable_for_data {
+            ctrl2 |= FDS;
+        }
+        if config.enable_for_click {
+            ctrl2 |= HPCLICK;
+        }
+        if config.enable_for_interrupt2 {
+            ctrl2 |= HPIS2;
+        }
+        if config.enable_for_interrupt1 {
+            ctrl2 |= HPIS1;
+        }
+
+        self.write_register(Register::CTRL2, ctrl2)
+    }
+
+    /// Read current high-pass filter configuration.
+    #[doc(alias = "CTRL_REG2")]
+    pub fn get_high_pass_filter_config(
+        &mut self,
+    ) -> Result<HighPassFilterConfig, Error<CORE::BusError, CORE::PinError>> {
+        let ctrl2 = self.read_register(Register::CTRL2)?;
+
+        Ok(HighPassFilterConfig {
+            mode: match (ctrl2 >> 6) & 0b11 {
+                0b00 => HighPassFilterMode::Normal,
+                0b01 => HighPassFilterMode::Reference,
+                0b10 => HighPassFilterMode::AutoresetOnInterrupt,
+                _ => HighPassFilterMode::Normal,
+            },
+            cutoff: match (ctrl2 >> 4) & 0b11 {
+                0b00 => HighPassFilterCutoff::Lowest,
+                0b01 => HighPassFilterCutoff::Low,
+                0b10 => HighPassFilterCutoff::Medium,
+                0b11 => HighPassFilterCutoff::High,
+                _ => HighPassFilterCutoff::Lowest,
+            },
+            enable_for_interrupt1: ctrl2 & HPIS1 != 0,
+            enable_for_interrupt2: ctrl2 & HPIS2 != 0,
+            enable_for_click: ctrl2 & HPCLICK != 0,
+            enable_for_data: ctrl2 & FDS != 0,
+        })
     }
 
     /// Configure 'Sleep to wake' and 'Return to sleep' threshold and duration.
