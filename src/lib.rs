@@ -77,13 +77,13 @@ where
     ///
     ///     use nrf52840_hal::gpio::{Level, PushPull};
     ///     use lis3dh::Lis3dh;
-    ///     
+    ///
     ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
     ///     let pins = p0::Parts::new(peripherals.P0);
-    ///     
+    ///
     ///     let twim0_scl = pins.p0_31.into_floating_input().degrade();
     ///     let twim0_sda = pins.p0_30.into_floating_input().degrade();
-    ///     
+    ///
     ///     let i2c = nrf52840_hal::twim::Twim::new(
     ///         peripherals.TWIM0,
     ///         nrf52840_hal::twim::Pins {
@@ -92,7 +92,7 @@ where
     ///         },
     ///         nrf52840_hal::twim::Frequency::K400,
     ///     );
-    ///     
+    ///
     ///     let lis3dh = Lis3dh::new_i2c(i2c, lis3dh::SlaveAddr::Default).unwrap();
     pub fn new_i2c(
         i2c: I2C,
@@ -130,20 +130,20 @@ where
     ///     use nrf52840_hal::gpio::{p0::{Parts, P0_28}, *};
     ///     use nrf52840_hal::spim::Spim;
     ///     use lis3dh::Lis3dh;
-    ///     
+    ///
     ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
     ///     let port0 = Parts::new(peripherals.P0);
-    ///     
+    ///
     ///     // define the chip select pin
     ///     let cs: P0_28<Output<PushPull>> = port0.p0_28.into_push_pull_output(Level::High);
-    ///     
+    ///
     ///     // spi pins: clock, miso, mosi
     ///     let pins = nrf52840_hal::spim::Pins {
     ///         sck: port0.p0_31.into_push_pull_output(Level::Low).degrade(),
     ///         miso: Some(port0.p0_30.into_push_pull_output(Level::Low).degrade()),
     ///         mosi: Some(port0.p0_29.into_floating_input().degrade()),
     ///     };
-    ///     
+    ///
     ///     // set up the spi peripheral
     ///     let spi = Spim::new(
     ///         peripherals.SPIM2,
@@ -700,7 +700,7 @@ where
 
     /// Configure 'Sleep to wake' and 'Return to sleep' threshold and duration.
     ///
-    /// The LIS3DH can be programmed to automatically switch to low-power mode upon recognition of a determined event.  
+    /// The LIS3DH can be programmed to automatically switch to low-power mode upon recognition of a determined event.
     /// Once the event condition is over, the device returns back to the preset normal or highresolution mode.
     ///
     /// Example: enter low-power mode. When a measurement above 1.1g is registered, then wake up
@@ -710,12 +710,12 @@ where
     ///
     ///     let range = Range::default();
     ///     let data_rate = DataRate::Hz_400;
-    ///     
+    ///
     ///     let threshold = Threshold::g(range, 1.1);
     ///     let duration = Duration::miliseconds(data_rate, 25.0);
-    ///     
+    ///
     ///     lis3dh.configure_switch_to_low_power(threshold, duration)?;
-    ///     
+    ///
     ///     lis3dh.set_datarate(data_rate)?;
     #[doc(alias = "ACT_THS")]
     #[doc(alias = "ACT_DUR")]

@@ -14,8 +14,8 @@ use hal::sercom::{I2CMaster1, PadPin};
 use hal::time::KiloHertz;
 
 use lis3dh::{
-    DataRate, Detect4D, Duration, HighPassFilterConfig, Interrupt1, InterruptConfig,
-    InterruptMode, IrqPin1Config, LatchInterruptRequest, Lis3dh, Range, SlaveAddr, Threshold,
+    DataRate, Detect4D, Duration, HighPassFilterConfig, Interrupt1, InterruptConfig, InterruptMode,
+    IrqPin1Config, LatchInterruptRequest, Lis3dh, Range, SlaveAddr, Threshold,
 };
 
 #[entry]
