@@ -34,8 +34,8 @@ pub use interrupts::{
 
 use register::*;
 pub use register::{
-    ClickCount, DataRate, DataStatus, Duration, FifoMode, FifoStatus, Mode, Range, Register,
-    SlaveAddr, Threshold,
+    ClickCount, DataRate, DataStatus, Duration, FifoMode, FifoStatus, HighPassFilterConfig,
+    HighPassFilterCutoff, HighPassFilterMode, Mode, Range, Register, SlaveAddr, Threshold,
 };
 
 /// Accelerometer errors, generic around another error type `E` representing
@@ -77,13 +77,13 @@ where
     ///
     ///     use nrf52840_hal::gpio::{Level, PushPull};
     ///     use lis3dh::Lis3dh;
-    ///     
+    ///
     ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
     ///     let pins = p0::Parts::new(peripherals.P0);
-    ///     
+    ///
     ///     let twim0_scl = pins.p0_31.into_floating_input().degrade();
     ///     let twim0_sda = pins.p0_30.into_floating_input().degrade();
-    ///     
+    ///
     ///     let i2c = nrf52840_hal::twim::Twim::new(
     ///         peripherals.TWIM0,
     ///         nrf52840_hal::twim::Pins {
@@ -92,7 +92,7 @@ where
     ///         },
     ///         nrf52840_hal::twim::Frequency::K400,
     ///     );
-    ///     
+    ///
     ///     let lis3dh = Lis3dh::new_i2c(i2c, lis3dh::SlaveAddr::Default).unwrap();
     pub fn new_i2c(
         i2c: I2C,
@@ -130,20 +130,20 @@ where
     ///     use nrf52840_hal::gpio::{p0::{Parts, P0_28}, *};
     ///     use nrf52840_hal::spim::Spim;
     ///     use lis3dh::Lis3dh;
-    ///     
+    ///
     ///     let peripherals = nrf52840_hal::pac::Peripherals::take().unwrap();
     ///     let port0 = Parts::new(peripherals.P0);
-    ///     
+    ///
     ///     // define the chip select pin
     ///     let cs: P0_28<Output<PushPull>> = port0.p0_28.into_push_pull_output(Level::High);
-    ///     
+    ///
     ///     // spi pins: clock, miso, mosi
     ///     let pins = nrf52840_hal::spim::Pins {
     ///         sck: port0.p0_31.into_push_pull_output(Level::Low).degrade(),
     ///         miso: Some(port0.p0_30.into_push_pull_output(Level::Low).degrade()),
     ///         mosi: Some(port0.p0_29.into_floating_input().degrade()),
     ///     };
-    ///     
+    ///
     ///     // set up the spi peripheral
     ///     let spi = Spim::new(
     ///         peripherals.SPIM2,
@@ -632,9 +632,75 @@ where
         Ok(InterruptSource::from_bits(irq_src))
     }
 
+    /// Configure high-pass filter.
+    ///
+    /// The high-pass filter can be applied to interrupt paths and/or data output.
+    /// This is useful for motion detection where you want to remove the DC component (gravity).
+    ///
+    /// Example: enable high-pass filter for interrupt 1 only, keep data output unfiltered.
+    ///
+    ///     lis3dh.configure_high_pass_filter(HighPassFilterConfig {
+    ///         enable_for_interrupt1: true,
+    ///         ..Default::default()
+    ///     })?;
+    #[doc(alias = "CTRL_REG2")]
+    #[doc(alias = "HPF")]
+    pub fn configure_high_pass_filter(
+        &mut self,
+        config: HighPassFilterConfig,
+    ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
+        let mut ctrl2 = 0u8;
+
+        ctrl2 |= (config.mode as u8) << 6;
+        ctrl2 |= (config.cutoff as u8) << 4;
+
+        if config.enable_for_data {
+            ctrl2 |= FDS;
+        }
+        if config.enable_for_click {
+            ctrl2 |= HPCLICK;
+        }
+        if config.enable_for_interrupt2 {
+            ctrl2 |= HPIS2;
+        }
+        if config.enable_for_interrupt1 {
+            ctrl2 |= HPIS1;
+        }
+
+        self.write_register(Register::CTRL2, ctrl2)
+    }
+
+    /// Read current high-pass filter configuration.
+    #[doc(alias = "CTRL_REG2")]
+    pub fn get_high_pass_filter_config(
+        &mut self,
+    ) -> Result<HighPassFilterConfig, Error<CORE::BusError, CORE::PinError>> {
+        let ctrl2 = self.read_register(Register::CTRL2)?;
+
+        Ok(HighPassFilterConfig {
+            mode: match (ctrl2 >> 6) & 0b11 {
+                0b00 => HighPassFilterMode::Normal,
+                0b01 => HighPassFilterMode::Reference,
+                0b10 => HighPassFilterMode::AutoresetOnInterrupt,
+                _ => HighPassFilterMode::Normal,
+            },
+            cutoff: match (ctrl2 >> 4) & 0b11 {
+                0b00 => HighPassFilterCutoff::Lowest,
+                0b01 => HighPassFilterCutoff::Low,
+                0b10 => HighPassFilterCutoff::Medium,
+                0b11 => HighPassFilterCutoff::High,
+                _ => HighPassFilterCutoff::Lowest,
+            },
+            enable_for_interrupt1: ctrl2 & HPIS1 != 0,
+            enable_for_interrupt2: ctrl2 & HPIS2 != 0,
+            enable_for_click: ctrl2 & HPCLICK != 0,
+            enable_for_data: ctrl2 & FDS != 0,
+        })
+    }
+
     /// Configure 'Sleep to wake' and 'Return to sleep' threshold and duration.
     ///
-    /// The LIS3DH can be programmed to automatically switch to low-power mode upon recognition of a determined event.  
+    /// The LIS3DH can be programmed to automatically switch to low-power mode upon recognition of a determined event.
     /// Once the event condition is over, the device returns back to the preset normal or highresolution mode.
     ///
     /// Example: enter low-power mode. When a measurement above 1.1g is registered, then wake up
@@ -644,12 +710,12 @@ where
     ///
     ///     let range = Range::default();
     ///     let data_rate = DataRate::Hz_400;
-    ///     
+    ///
     ///     let threshold = Threshold::g(range, 1.1);
     ///     let duration = Duration::miliseconds(data_rate, 25.0);
-    ///     
+    ///
     ///     lis3dh.configure_switch_to_low_power(threshold, duration)?;
-    ///     
+    ///
     ///     lis3dh.set_datarate(data_rate)?;
     #[doc(alias = "ACT_THS")]
     #[doc(alias = "ACT_DUR")]
