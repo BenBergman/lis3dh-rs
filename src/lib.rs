@@ -199,11 +199,11 @@ where
         self.enable_axis((conf.enable_x_axis, conf.enable_y_axis, conf.enable_z_axis))?;
 
         if conf.enable_temperature {
-            self.enable_temp(true)?;
+            self.enable_temp(true)
+        } else {
+            // Not Sure if this is necessary, but enable ADC as it was done before
+            self.register_set_bits(Register::TEMP_CFG, ADC_EN)
         }
-
-        // Enable ADCs.
-        self.write_register(Register::TEMP_CFG, ADC_EN)
     }
 
     /// `WHO_AM_I` register.
@@ -359,7 +359,10 @@ where
         &mut self,
         enable: bool,
     ) -> Result<(), Error<CORE::BusError, CORE::PinError>> {
-        self.register_xset_bits(Register::TEMP_CFG, ADC_EN & TEMP_EN, enable)?;
+        // Bit 7 (ADC_EN): Must be 1 to enable ADC
+        // Bit 6 (TEMP_EN): Must be 1 to enable temperature sensor
+        // Both bits must be set together to read temperature
+        self.register_xset_bits(Register::TEMP_CFG, ADC_EN | TEMP_EN, enable)?;
 
         // enable block data update (required for temp reading)
         if enable {
@@ -384,7 +387,7 @@ where
     pub fn get_temp_outf(&mut self) -> Result<f32, Error<CORE::BusError, CORE::PinError>> {
         let temp_out = self.get_temp_out()?;
 
-        Ok(temp_out as f32 / 256.0 + 25.0)
+        Ok(temp_out as f32 / 512.0 + 25.0)
     }
 
     /// Configure click threshold.
