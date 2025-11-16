@@ -387,7 +387,7 @@ where
     pub fn get_temp_outf(&mut self) -> Result<f32, Error<CORE::BusError, CORE::PinError>> {
         let temp_out = self.get_temp_out()?;
 
-        Ok(temp_out as f32 / 256.0 + 25.0)
+        Ok(temp_out as f32 / 512.0 + 25.0)
     }
 
     /// Configure click threshold.
