@@ -18,10 +18,9 @@ use accelerometer::error::Error as AccelerometerError;
 use accelerometer::vector::{F32x3, I16x3};
 use accelerometer::{Accelerometer, RawAccelerometer};
 
-use embedded_hal::blocking::i2c::{self, WriteRead};
-use embedded_hal::blocking::spi::{self, Transfer};
-
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
+use embedded_hal::i2c::I2c;
+use embedded_hal::spi::SpiBus;
 
 mod interrupts;
 mod register;
@@ -69,7 +68,7 @@ pub struct Lis3dh<CORE> {
 
 impl<I2C, E> Lis3dh<Lis3dhI2C<I2C>>
 where
-    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+    I2C: I2c<Error = E>,
 {
     /// Create a new LIS3DH driver from the given I2C peripheral.
     /// Default is Hz_400 HighResolution.
@@ -121,7 +120,7 @@ where
 
 impl<SPI, NSS, ESPI, ENSS> Lis3dh<Lis3dhSPI<SPI, NSS>>
 where
-    SPI: spi::Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
+    SPI: SpiBus<u8, Error = ESPI>,
     NSS: OutputPin<Error = ENSS>,
 {
     /// Create a new LIS3DH driver from the given SPI peripheral.
@@ -908,7 +907,7 @@ pub struct Lis3dhI2C<I2C> {
 
 impl<I2C, E> Lis3dhCore for Lis3dhI2C<I2C>
 where
-    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+    I2C: I2c<Error = E>,
 {
     type BusError = E;
     type PinError = core::convert::Infallible;
@@ -962,7 +961,7 @@ pub struct Lis3dhSPI<SPI, NSS> {
 
 impl<SPI, NSS, ESPI, ENSS> Lis3dhSPI<SPI, NSS>
 where
-    SPI: spi::Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
+    SPI: SpiBus<u8, Error = ESPI>,
     NSS: OutputPin<Error = ENSS>,
 {
     /// turn on the SPI slave
@@ -1001,7 +1000,7 @@ where
         self.nss_turn_on()?;
         self.spi
             .write(&[start_register.addr() | 0xC0])
-            .and_then(|_| self.spi.transfer(buf))
+            .and_then(|_| self.spi.transfer_in_place(buf))
             .map_err(Error::Bus)?;
         self.nss_turn_off()
     }
@@ -1009,7 +1008,7 @@ where
 
 impl<SPI, NSS, ESPI, ENSS> Lis3dhCore for Lis3dhSPI<SPI, NSS>
 where
-    SPI: spi::Write<u8, Error = ESPI> + Transfer<u8, Error = ESPI>,
+    SPI: SpiBus<u8, Error = ESPI>,
     NSS: OutputPin<Error = ENSS>,
 {
     type BusError = ESPI;
@@ -1037,7 +1036,7 @@ where
         self.nss_turn_on()?;
         self.spi
             .write(&[register.addr() | 0x80])
-            .and_then(|_| self.spi.transfer(&mut data))
+            .and_then(|_| self.spi.transfer_in_place(&mut data))
             .map_err(Error::Bus)?;
         self.nss_turn_off()?;
         Ok(data[0])
