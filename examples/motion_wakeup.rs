@@ -1,17 +1,17 @@
 #![no_std]
 #![no_main]
 
-use circuit_playground_express as hal;
+use circuit_playground_express as bsp;
 extern crate panic_halt;
 
+use bsp::hal;
+use bsp::pac::{CorePeripherals, Peripherals};
 use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
 use hal::clock::GenericClockController;
 use hal::delay::Delay;
-use hal::pac::{CorePeripherals, Peripherals};
 use hal::prelude::*;
-use hal::sercom::{I2CMaster1, PadPin};
-use hal::time::KiloHertz;
+use hal::sercom::i2c;
 
 use lis3dh::{
     DataRate, Detect4D, Duration, HighPassFilterConfig, Interrupt1, InterruptConfig, InterruptMode,
@@ -23,22 +23,19 @@ fn main() -> ! {
     let mut peripherals = Peripherals::take().unwrap();
     let core = CorePeripherals::take().unwrap();
     let mut clocks = GenericClockController::with_internal_32kosc(
-        peripherals.GCLK,
-        &mut peripherals.PM,
-        &mut peripherals.SYSCTRL,
-        &mut peripherals.NVMCTRL,
+        peripherals.gclk,
+        &mut peripherals.pm,
+        &mut peripherals.sysctrl,
+        &mut peripherals.nvmctrl,
     );
-    let mut pins = hal::Pins::new(peripherals.PORT);
+    let pins = bsp::Pins::new(peripherals.port);
     let gclk0 = clocks.gclk0();
 
-    let i2c = I2CMaster1::new(
-        &clocks.sercom1_core(&gclk0).unwrap(),
-        KiloHertz(400),
-        peripherals.SERCOM1,
-        &mut peripherals.PM,
-        pins.accel_sda.into_pad(&mut pins.port),
-        pins.accel_scl.into_pad(&mut pins.port),
-    );
+    let clock = clocks.sercom1_core(&gclk0).unwrap();
+    let pads = i2c::Pads::new(pins.accel_sda, pins.accel_scl);
+    let i2c = i2c::Config::new(&mut peripherals.pm, peripherals.sercom1, pads, clock.freq())
+        .baud(400.kHz())
+        .enable();
 
     let mut lis3dh = Lis3dh::new_i2c(i2c, SlaveAddr::Alternate).unwrap();
 
