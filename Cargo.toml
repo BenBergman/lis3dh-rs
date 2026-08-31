@@ -16,12 +16,26 @@ keywords = [
 repository = "https://github.com/BenBergman/lis3dh-rs"
 edition = "2018"
 
+[lib]
+doctest = false
+
 [dependencies]
 accelerometer = "~0.12"
 embedded-hal = "1.0"
 num_enum = { version = "~0.5", default-features = false }
 
-[dev-dependencies]
+[features]
+cpx-examples = []
+
+[[example]]
+name = "cpx"
+required-features = ["cpx-examples"]
+
+[[example]]
+name = "motion_wakeup"
+required-features = ["cpx-examples"]
+
+[target.thumbv6m-none-eabi.dev-dependencies]
 circuit_playground_express = { version = "0.12", features = ["use_semihosting"] }
 cortex-m-rt = "~0.7"
 cortex-m-semihosting = "~0.3"
