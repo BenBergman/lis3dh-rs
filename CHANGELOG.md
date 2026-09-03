@@ -1,3 +1,14 @@
+# 0.5.0
+* embedded-hal 1.0
+* other dependency/example updates
+* fix temperature sensor
+
+# 0.4.4
+* High pass interrupt filter
+
+# 0.4.3
+* Helper functions for tap detection
+
 # 0.4.2
 * Interrupt support, adding methods
     
